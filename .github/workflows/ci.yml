@@ -64,6 +64,30 @@ jobs:
           install: >-
             make
             mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
 
       - name: build and test
         run: make test
+
+      # Windows is the only place the exported ws2_32 requirement can be
+      # checked, which is why this job runs the package test too.
+      - name: package
+        run: ./scripts/package-test.sh
+
+  # The Makefile stays the canonical build - it compiles the library, runs
+  # every test and the sanitizer pass. CMake exists only so a consuming
+  # project can find_package(cyclone) and link cyclone::cyclone, so what this
+  # job checks is exactly that: configure, build, install to a throwaway
+  # prefix, then configure tests/package against the installed result and run
+  # what it produced. Nothing here duplicates a test list.
+  package:
+    name: package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: cmake install and consume
+        run: ./scripts/package-test.sh
