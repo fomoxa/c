@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# This repository builds and tests on its own: a C99 compiler and make, no
+# dependency, and nothing outside the checkout. The generated codec tree
+# (examples/demo/src/generated) is committed for exactly this reason - a job
+# here can never reach a sibling repository, and no job installs a generator
+# to check that tree for freshness either.
+jobs:
+  linux:
+    name: linux (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build and test
+        run: make test CC=${{ matrix.cc }}
+
+      # Every test again under AddressSanitizer and UndefinedBehaviorSanitizer.
+      # LeakSanitizer rides along with ASan on Linux, which is what makes this
+      # worth a second run: the library mallocs its outbox, receive buffer and
+      # event arena, the UDP hub queues datagrams, and the generated decoder
+      # mallocs strings - this is what proves they are all released.
+      - name: sanitizers
+        run: make sanitize CC=${{ matrix.cc }}
+
+      - name: examples build
+        run: make examples CC=${{ matrix.cc }}
+
+  macos:
+    name: macos (clang)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build and test
+        run: make test
+      - name: sanitizers
+        run: make sanitize
+
+  # The Winsock half of src/transport/socket.c is the one part of this library
+  # that a POSIX developer cannot exercise locally, so it gets its own job
+  # rather than being taken on trust.
+  windows:
+    name: windows (mingw)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: build and test
+        run: make test

@@ -1,0 +1,2 @@
+src = "src/models"
+out = "src/generated"
