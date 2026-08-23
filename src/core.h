@@ -1,40 +1,40 @@
-#ifndef CYCLONE_INTERNAL_CORE_H
-#define CYCLONE_INTERNAL_CORE_H
+#ifndef FOMOXA_INTERNAL_CORE_H
+#define FOMOXA_INTERNAL_CORE_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include "cyclone/common.h"
-#include "cyclone/event.h"
-#include "cyclone/frame.h"
-#include "cyclone/schema.h"
-#include "cyclone/session.h"
-#include "cyclone/transport.h"
+#include "fomoxa/common.h"
+#include "fomoxa/event.h"
+#include "fomoxa/frame.h"
+#include "fomoxa/schema.h"
+#include "fomoxa/session.h"
+#include "fomoxa/transport.h"
 
-typedef struct cyc_sink {
+typedef struct fmx_sink {
     uint8_t *arena;
     size_t arena_cap;
     size_t arena_len;
-    cyc_event *events;
+    fmx_event *events;
     size_t *offsets;
     size_t event_cap;
     size_t event_count;
-} cyc_sink;
+} fmx_sink;
 
-cyc_result cyc_sink_init(cyc_sink *sink, size_t event_cap);
-void cyc_sink_release(cyc_sink *sink);
-void cyc_sink_clear(cyc_sink *sink);
-void cyc_sink_push(cyc_sink *sink, uint64_t peer, cyc_event_kind kind, uint32_t message_id,
+fmx_result fmx_sink_init(fmx_sink *sink, size_t event_cap);
+void fmx_sink_release(fmx_sink *sink);
+void fmx_sink_clear(fmx_sink *sink);
+void fmx_sink_push(fmx_sink *sink, uint64_t peer, fmx_event_kind kind, uint32_t message_id,
                    const uint8_t *payload, size_t payload_len, int reason);
-void cyc_sink_resolve(cyc_sink *sink);
+void fmx_sink_resolve(fmx_sink *sink);
 
-typedef struct cyc_core {
-    cyc_transport transport;
-    cyc_session *session;
-    cyc_config config;
+typedef struct fmx_core {
+    fmx_transport transport;
+    fmx_session *session;
+    fmx_config config;
     bool stream;
-    cyc_stream_decoder decoder;
+    fmx_stream_decoder decoder;
     uint8_t *outbox;
     size_t outbox_cap;
     size_t outbox_len;
@@ -44,17 +44,17 @@ typedef struct cyc_core {
     uint8_t *scratch;
     size_t scratch_cap;
     bool dead;
-    cyc_disconnect dead_reason;
+    fmx_disconnect dead_reason;
     bool announced;
-} cyc_core;
+} fmx_core;
 
-cyc_result cyc_core_init(cyc_core *core, cyc_transport transport, const cyc_schema *schema,
-                         const cyc_config *config, cyc_role role, uint64_t now_ms);
-void cyc_core_release(cyc_core *core);
-void cyc_core_tick(cyc_core *core, uint64_t now_ms, uint64_t peer, cyc_sink *sink);
-cyc_result cyc_core_send(cyc_core *core, uint32_t message_id, const uint8_t *payload, size_t len);
-void cyc_core_close(cyc_core *core);
-bool cyc_core_finished(const cyc_core *core);
-bool cyc_core_congested(const cyc_core *core);
+fmx_result fmx_core_init(fmx_core *core, fmx_transport transport, const fmx_schema *schema,
+                         const fmx_config *config, fmx_role role, uint64_t now_ms);
+void fmx_core_release(fmx_core *core);
+void fmx_core_tick(fmx_core *core, uint64_t now_ms, uint64_t peer, fmx_sink *sink);
+fmx_result fmx_core_send(fmx_core *core, uint32_t message_id, const uint8_t *payload, size_t len);
+void fmx_core_close(fmx_core *core);
+bool fmx_core_finished(const fmx_core *core);
+bool fmx_core_congested(const fmx_core *core);
 
-#endif /* CYCLONE_INTERNAL_CORE_H */
+#endif /* FOMOXA_INTERNAL_CORE_H */

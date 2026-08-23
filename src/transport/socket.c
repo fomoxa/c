@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #endif
 
-void cyc_net_startup(void) {
+void fmx_net_startup(void) {
 #if defined(_WIN32)
     static int started = 0;
     if (!started) {
@@ -17,8 +17,8 @@ void cyc_net_startup(void) {
 #endif
 }
 
-void cyc_socket_close(cyc_fd fd) {
-    if (fd == CYC_INVALID_FD) {
+void fmx_socket_close(fmx_fd fd) {
+    if (fd == FMX_INVALID_FD) {
         return;
     }
 #if defined(_WIN32)
@@ -28,7 +28,7 @@ void cyc_socket_close(cyc_fd fd) {
 #endif
 }
 
-bool cyc_socket_set_nonblocking(cyc_fd fd) {
+bool fmx_socket_set_nonblocking(fmx_fd fd) {
 #if defined(_WIN32)
     u_long mode = 1;
     return ioctlsocket(fd, (long)FIONBIO, &mode) == 0;
@@ -41,8 +41,8 @@ bool cyc_socket_set_nonblocking(cyc_fd fd) {
 #endif
 }
 
-void cyc_socket_shutdown_write(cyc_fd fd) {
-    if (fd == CYC_INVALID_FD) {
+void fmx_socket_shutdown_write(fmx_fd fd) {
+    if (fd == FMX_INVALID_FD) {
         return;
     }
 #if defined(_WIN32)
@@ -52,7 +52,7 @@ void cyc_socket_shutdown_write(cyc_fd fd) {
 #endif
 }
 
-int cyc_socket_last_error(void) {
+int fmx_socket_last_error(void) {
 #if defined(_WIN32)
     return WSAGetLastError();
 #else
@@ -60,7 +60,7 @@ int cyc_socket_last_error(void) {
 #endif
 }
 
-bool cyc_socket_would_block(int error) {
+bool fmx_socket_would_block(int error) {
 #if defined(_WIN32)
     return error == WSAEWOULDBLOCK || error == WSAEINTR;
 #else
@@ -68,7 +68,7 @@ bool cyc_socket_would_block(int error) {
 #endif
 }
 
-bool cyc_socket_message_too_long(int error) {
+bool fmx_socket_message_too_long(int error) {
 #if defined(_WIN32)
     return error == WSAEMSGSIZE;
 #else
@@ -76,7 +76,7 @@ bool cyc_socket_message_too_long(int error) {
 #endif
 }
 
-bool cyc_socket_reset(int error) {
+bool fmx_socket_reset(int error) {
 #if defined(_WIN32)
     return error == WSAECONNRESET;
 #else
@@ -84,11 +84,11 @@ bool cyc_socket_reset(int error) {
 #endif
 }
 
-uint16_t cyc_socket_port(cyc_fd fd) {
+uint16_t fmx_socket_port(fmx_fd fd) {
     struct sockaddr_storage address;
     socklen_t length = (socklen_t)sizeof(address);
 
-    if (fd == CYC_INVALID_FD) {
+    if (fd == FMX_INVALID_FD) {
         return 0;
     }
     if (getsockname(fd, (struct sockaddr *)&address, &length) != 0) {
@@ -103,7 +103,7 @@ uint16_t cyc_socket_port(cyc_fd fd) {
     return 0;
 }
 
-ptrdiff_t cyc_socket_send(cyc_fd fd, const uint8_t *bytes, size_t len) {
+ptrdiff_t fmx_socket_send(fmx_fd fd, const uint8_t *bytes, size_t len) {
 #if defined(_WIN32)
     return (ptrdiff_t)send(fd, (const char *)bytes, (int)len, 0);
 #else
@@ -111,7 +111,7 @@ ptrdiff_t cyc_socket_send(cyc_fd fd, const uint8_t *bytes, size_t len) {
 #endif
 }
 
-ptrdiff_t cyc_socket_recv(cyc_fd fd, uint8_t *buffer, size_t cap) {
+ptrdiff_t fmx_socket_recv(fmx_fd fd, uint8_t *buffer, size_t cap) {
 #if defined(_WIN32)
     return (ptrdiff_t)recv(fd, (char *)buffer, (int)cap, 0);
 #else
@@ -119,7 +119,7 @@ ptrdiff_t cyc_socket_recv(cyc_fd fd, uint8_t *buffer, size_t cap) {
 #endif
 }
 
-ptrdiff_t cyc_socket_sendto(cyc_fd fd, const uint8_t *bytes, size_t len,
+ptrdiff_t fmx_socket_sendto(fmx_fd fd, const uint8_t *bytes, size_t len,
                             const struct sockaddr *address, socklen_t address_len) {
 #if defined(_WIN32)
     return (ptrdiff_t)sendto(fd, (const char *)bytes, (int)len, 0, address, address_len);
@@ -128,7 +128,7 @@ ptrdiff_t cyc_socket_sendto(cyc_fd fd, const uint8_t *bytes, size_t len,
 #endif
 }
 
-ptrdiff_t cyc_socket_recvfrom(cyc_fd fd, uint8_t *buffer, size_t cap, struct sockaddr *address,
+ptrdiff_t fmx_socket_recvfrom(fmx_fd fd, uint8_t *buffer, size_t cap, struct sockaddr *address,
                               socklen_t *address_len) {
 #if defined(_WIN32)
     return (ptrdiff_t)recvfrom(fd, (char *)buffer, (int)cap, 0, address, address_len);

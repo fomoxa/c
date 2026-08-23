@@ -1,6 +1,6 @@
 #include "portable.h"
 
-#include "cyclone/common.h"
+#include "fomoxa/common.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -8,27 +8,27 @@
 #include <time.h>
 #endif
 
-const char *cyc_result_name(cyc_result result) {
+const char *fmx_result_name(fmx_result result) {
     switch (result) {
-    case CYC_OK:
+    case FMX_OK:
         return "ok";
-    case CYC_ERR_NOT_READY:
+    case FMX_ERR_NOT_READY:
         return "the handshake has not been accepted yet";
-    case CYC_ERR_CONGESTED:
+    case FMX_ERR_CONGESTED:
         return "a frame is still waiting to go out";
-    case CYC_ERR_TOO_LARGE:
+    case FMX_ERR_TOO_LARGE:
         return "the transport cannot carry a frame this large";
-    case CYC_ERR_CLOSED:
+    case FMX_ERR_CLOSED:
         return "the session is closed";
-    case CYC_ERR_NO_MEMORY:
+    case FMX_ERR_NO_MEMORY:
         return "out of memory";
-    case CYC_ERR_INVALID:
+    case FMX_ERR_INVALID:
         return "invalid argument";
     }
     return "unknown";
 }
 
-void cyc_config_defaults(cyc_config *config) {
+void fmx_config_defaults(fmx_config *config) {
     if (config == NULL) {
         return;
     }
@@ -40,7 +40,7 @@ void cyc_config_defaults(cyc_config *config) {
     config->max_peers = 256;
 }
 
-uint64_t cyc_now_ms(void) {
+uint64_t fmx_now_ms(void) {
 #if defined(_WIN32)
     return (uint64_t)GetTickCount64();
 #else

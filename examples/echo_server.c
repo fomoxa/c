@@ -5,11 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "cyclone/net.h"
+#include "fomoxa/net.h"
 
-#include "game_message_cyclone.h"
+#include "game_message_fomoxa.h"
 #include "game_message_state.h"
-#include "player_input_cyclone.h"
+#include "player_input_fomoxa.h"
 #include "player_input_input.h"
 #include "schema.h"
 
@@ -42,19 +42,19 @@ static void step(const struct PlayerInput *input) {
     }
 }
 
-static void send_state(cyc_server *server, uint64_t peer) {
-    CycloneWriter writer;
+static void send_state(fmx_server *server, uint64_t peer) {
+    FomoxaWriter writer;
 
-    cyclone_writer_init(&writer);
+    fomoxa_writer_init(&writer);
     if (GameMessageStateCodec_encode(&writer, &STATE)) {
-        (void)cyc_server_send(server, peer, GAME_MESSAGE_STATE_MESSAGE_ID, writer.data, writer.len);
+        (void)fmx_server_send(server, peer, GAME_MESSAGE_STATE_MESSAGE_ID, writer.data, writer.len);
     }
-    cyclone_writer_free(&writer);
+    fomoxa_writer_free(&writer);
 }
 
 int main(void) {
-    cyc_listener listener;
-    cyc_server *server;
+    fmx_listener listener;
+    fmx_server *server;
 
     memset(&STATE, 0, sizeof(STATE));
     STATE.player_id = 1;
@@ -65,42 +65,42 @@ int main(void) {
     STATE.health = 100;
     STATE.is_alive = true;
 
-    if (cyc_tcp_listen("127.0.0.1", PORT, &listener) != CYC_OK) {
+    if (fmx_tcp_listen("127.0.0.1", PORT, &listener) != FMX_OK) {
         fprintf(stderr, "cannot listen on 127.0.0.1:%d\n", PORT);
         return 1;
     }
-    server = cyc_server_create(listener, demo_schema(), NULL);
+    server = fmx_server_create(listener, demo_schema(), NULL);
     if (server == NULL) {
         fprintf(stderr, "cannot create the server\n");
         return 1;
     }
-    printf("cyclone-c server listening on 127.0.0.1:%d\n", PORT);
+    printf("fomoxa-c server listening on 127.0.0.1:%d\n", PORT);
 
     for (;;) {
-        const cyc_event *events;
-        size_t count = cyc_server_tick(server, cyc_now_ms());
+        const fmx_event *events;
+        size_t count = fmx_server_tick(server, fmx_now_ms());
         size_t index;
 
-        events = cyc_server_events(server, &count);
+        events = fmx_server_events(server, &count);
         for (index = 0; index < count; ++index) {
-            const cyc_event *event = &events[index];
+            const fmx_event *event = &events[index];
 
             switch (event->kind) {
-            case CYC_EVENT_CONNECTED:
+            case FMX_EVENT_CONNECTED:
                 printf("peer#%llu connected\n", (unsigned long long)event->peer);
                 break;
-            case CYC_EVENT_READY:
+            case FMX_EVENT_READY:
                 printf("peer#%llu handshake accepted\n", (unsigned long long)event->peer);
                 send_state(server, event->peer);
                 break;
-            case CYC_EVENT_MESSAGE:
+            case FMX_EVENT_MESSAGE:
                 if (event->message_id == PLAYER_INPUT_INPUT_MESSAGE_ID) {
                     struct PlayerInput input;
-                    CycloneReader reader;
+                    FomoxaReader reader;
                     memset(&input, 0, sizeof(input));
-                    cyclone_reader_init(&reader, event->payload, event->payload_len,
-                                        cyclone_limits_unlimited());
-                    if (PlayerInputInputCodec_decode(&reader, &input).kind == CYCLONE_DECODE_OK) {
+                    fomoxa_reader_init(&reader, event->payload, event->payload_len,
+                                        fomoxa_limits_unlimited());
+                    if (PlayerInputInputCodec_decode(&reader, &input).kind == FOMOXA_DECODE_OK) {
                         step(&input);
                         printf("peer#%llu input at tick %llu -> hp %u\n",
                                (unsigned long long)event->peer, (unsigned long long)input.tick,
@@ -110,16 +110,16 @@ int main(void) {
                     PlayerInput_free(&input);
                 }
                 break;
-            case CYC_EVENT_HANDSHAKE_FAILED:
+            case FMX_EVENT_HANDSHAKE_FAILED:
                 printf("peer#%llu refused: %s\n", (unsigned long long)event->peer,
-                       cyc_handshake_failure_name((cyc_handshake_failure)event->reason));
+                       fmx_handshake_failure_name((fmx_handshake_failure)event->reason));
                 break;
-            case CYC_EVENT_DISCONNECTED:
+            case FMX_EVENT_DISCONNECTED:
                 printf("peer#%llu gone: %s\n", (unsigned long long)event->peer,
-                       cyc_disconnect_name((cyc_disconnect)event->reason));
+                       fmx_disconnect_name((fmx_disconnect)event->reason));
                 break;
-            case CYC_EVENT_PROBE:
-            case CYC_EVENT_ACK:
+            case FMX_EVENT_PROBE:
+            case FMX_EVENT_ACK:
                 break;
             }
         }
