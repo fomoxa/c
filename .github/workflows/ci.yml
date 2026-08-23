@@ -76,7 +76,7 @@ jobs:
 
   # The Makefile stays the canonical build - it compiles the library, runs
   # every test and the sanitizer pass. CMake exists only so a consuming
-  # project can find_package(cyclone) and link cyclone::cyclone, so what this
+  # project can find_package(fomoxa) and link fomoxa::fomoxa, so what this
   # job checks is exactly that: configure, build, install to a throwaway
   # prefix, then configure tests/package against the installed result and run
   # what it produced. Nothing here duplicates a test list.

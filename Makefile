@@ -11,7 +11,7 @@ LDLIBS += -lws2_32
 endif
 
 BUILD    = build
-LIB      = $(BUILD)/libcyclone.a
+LIB      = $(BUILD)/libfomoxa.a
 
 # The library's sources live in sources.txt, one path per line, so this
 # Makefile and CMakeLists.txt read the same list instead of keeping two that
@@ -35,7 +35,7 @@ DEMO_WARN     = -Wall -Wextra
 
 # --- optional C++ wrapper ------------------------------------------------
 # Everything C++ lives between this marker and the one below. Delete the
-# block, include/cyclone/net.hpp, tests/test_cpp.cpp and examples/*_cpp.cpp,
+# block, include/fomoxa/net.hpp, tests/test_cpp.cpp and examples/*_cpp.cpp,
 # and the C library above builds and tests exactly as it did before - no C
 # source, target or flag refers to any of it. The build also skips itself
 # when either half is missing, so a machine with cc but no c++ still runs
@@ -45,7 +45,7 @@ CXXFLAGS     ?= -O2 -g
 CXX_CPPFLAGS  = -std=c++17 -Iinclude
 CXX_WARN      = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion -Werror
 
-CPP_HEADER    = $(wildcard include/cyclone/net.hpp)
+CPP_HEADER    = $(wildcard include/fomoxa/net.hpp)
 CPP_TEST_SRC  = $(wildcard tests/test_cpp.cpp)
 CPP_EX_SRCS   = $(wildcard examples/echo_client_cpp.cpp examples/echo_server_cpp.cpp)
 CPP_EX_BINS   = $(CPP_EX_SRCS:%.cpp=$(BUILD)/%)
@@ -128,28 +128,28 @@ PREFIX     ?= /usr/local
 INCLUDEDIR  = $(DESTDIR)$(PREFIX)/include
 LIBDIR      = $(DESTDIR)$(PREFIX)/lib
 
-# include/cyclone.h is deliberately NOT installed. It carries only the
-# CYCLONE_MODEL/CYCLONE_FIELD/CYCLONE_CODEC markers, every one of which
-# expands to nothing; cyclonec reads them as source text at generation time
+# include/fomoxa.h is deliberately NOT installed. It carries only the
+# FOMOXA_MODEL/FOMOXA_FIELD/FOMOXA_CODEC markers, every one of which
+# expands to nothing; fomoxac reads them as source text at generation time
 # and no compiled byte of this library refers to them. It is a file a
 # developer copies into their own project - the C/C++ counterpart of the
-# cyclone-attributes crate for Rust - so someone who only generates codecs
+# fomoxa-attributes crate for Rust - so someone who only generates codecs
 # needs it without needing this library at all. Never widen the glob below
 # to include/*.h, which would sweep it in.
 install: $(LIB)
-	install -d $(LIBDIR) $(INCLUDEDIR)/cyclone
+	install -d $(LIBDIR) $(INCLUDEDIR)/fomoxa
 	install -m 644 $(LIB) $(LIBDIR)/
-	install -m 644 include/cyclone/*.h $(INCLUDEDIR)/cyclone/
+	install -m 644 include/fomoxa/*.h $(INCLUDEDIR)/fomoxa/
 	@if [ -n "$(CPP_HEADER)" ]; then \
-		echo "install -m 644 $(CPP_HEADER) $(INCLUDEDIR)/cyclone/"; \
-		install -m 644 $(CPP_HEADER) $(INCLUDEDIR)/cyclone/; \
+		echo "install -m 644 $(CPP_HEADER) $(INCLUDEDIR)/fomoxa/"; \
+		install -m 644 $(CPP_HEADER) $(INCLUDEDIR)/fomoxa/; \
 	else \
-		echo "SKIP cyclone/net.hpp (C++ wrapper not present)"; \
+		echo "SKIP fomoxa/net.hpp (C++ wrapper not present)"; \
 	fi
 
 uninstall:
-	rm -f $(LIBDIR)/libcyclone.a
-	rm -rf $(INCLUDEDIR)/cyclone
+	rm -f $(LIBDIR)/libfomoxa.a
+	rm -rf $(INCLUDEDIR)/fomoxa
 
 clean:
 	rm -rf $(BUILD)

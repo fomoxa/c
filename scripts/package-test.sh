@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds Cyclone with CMake, installs it into a throwaway prefix, then
+# Builds Fomoxa with CMake, installs it into a throwaway prefix, then
 # configures tests/package against that prefix and runs what it produced.
 #
 # Everything here happens from a consumer's seat: tests/package never sees the
@@ -9,7 +9,7 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-work=${TMPDIR:-/tmp}/cyclone-package-test.$$
+work=${TMPDIR:-/tmp}/fomoxa-package-test.$$
 prefix=$work/prefix
 
 trap 'rm -rf "$work"' EXIT
@@ -23,8 +23,8 @@ echo "--- install into $prefix"
 cmake --install "$work/build" --config Release
 
 echo "--- the annotation header must not have been installed"
-if [ -e "$prefix/include/cyclone.h" ]; then
-    echo "cyclone.h was installed; it is copy-only and must stay out of the package" >&2
+if [ -e "$prefix/include/fomoxa.h" ]; then
+    echo "fomoxa.h was installed; it is copy-only and must stay out of the package" >&2
     exit 1
 fi
 

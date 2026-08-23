@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "generator": "fomoxac 0.2.0",
+  "schema_fingerprint": "sha256:a1b9a690f9d9af8e87a2b1d0ca740ca004430324d43debc276fd7b905d034fea",
+  "sha256_of": "each file with its `// generated-at:` line emptied, so an unchanged schema keeps an unchanged digest",
+  "sources": {
+    "src/models/game.h": {
+      "models": [
+        "GameMessage",
+        "PlayerInput",
+        "Vector3"
+      ],
+      "outputs": [
+        {
+          "path": "src/generated/game_message_state.h",
+          "model": "GameMessage",
+          "codec": "state",
+          "fingerprint": "sha256:69961c52b532c9d9e02c8d08bd8eed4eaa99a42b2775629a30c945265c840a75",
+          "sha256": "5bc19b69e64f203fada657b5b61e981ae72cf243ed0c38821e2645abee0507b0"
+        },
+        {
+          "path": "src/generated/player_input_input.h",
+          "model": "PlayerInput",
+          "codec": "input",
+          "fingerprint": "sha256:0a2dc2c0a2f0630eb4e8944bd6e084fe4f33ed022128ea371f625027b996e2d8",
+          "sha256": "ff06809091e39beb48d6a1cfd793b165ea82a365a2d382b60782af3126d56e23"
+        },
+        {
+          "path": "src/generated/vector3_state.h",
+          "model": "Vector3",
+          "codec": "state",
+          "fingerprint": "sha256:2c72dc3072bc93dc0a8d465d6fa1a85e9cda0462239b79f35659241717d0726e",
+          "sha256": "08a99b397fb15f39e8b5cb58e08998cec3ca37d9e20d8bedce65f4b88401adc6"
+        },
+        {
+          "path": "src/generated/vector3_input.h",
+          "model": "Vector3",
+          "codec": "input",
+          "fingerprint": "sha256:d8db83948ac10efe05fba3b62b874dc7bb9db392a50c88728d74210110440d96",
+          "sha256": "e08c73d981d791b7cfddf01014bc43e11c289eb5400bb772fd1c600c08488579"
+        }
+      ]
+    }
+  },
+  "shared": [
+    {
+      "path": "src/generated/runtime.h",
+      "kind": "runtime",
+      "sha256": "8fd469f9eb61b63912c15991c99dd0d399f57ff920a3488dd09018257aa9d349"
+    },
+    {
+      "path": "src/generated/arrays.h",
+      "kind": "arrays",
+      "sha256": "66b56d9672e35a242915f9818d9b9998ad96cd9a32c433d45330838d4a74a57c"
+    },
+    {
+      "path": "src/generated/handshake.h",
+      "kind": "handshake",
+      "sha256": "d1db81b4afae0a75223d949206634eac6c7216098a7b7bd72499c95fb8dd5851"
+    }
+  ]
+}

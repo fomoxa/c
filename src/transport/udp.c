@@ -1,57 +1,57 @@
 #include "socket.h"
 
-#include "cyclone/udp.h"
+#include "fomoxa/udp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 
-#define CYC_UDP_SCRATCH ((size_t)65535)
-#define CYC_UDP_MAX_PEERS ((size_t)256)
-#define CYC_UDP_MAX_QUEUED ((size_t)64)
-#define CYC_UDP_MAX_READS ((size_t)256)
+#define FMX_UDP_SCRATCH ((size_t)65535)
+#define FMX_UDP_MAX_PEERS ((size_t)256)
+#define FMX_UDP_MAX_QUEUED ((size_t)64)
+#define FMX_UDP_MAX_READS ((size_t)256)
 
-typedef struct cyc_datagram {
-    struct cyc_datagram *next;
+typedef struct fmx_datagram {
+    struct fmx_datagram *next;
     size_t len;
     uint8_t bytes[1];
-} cyc_datagram;
+} fmx_datagram;
 
-typedef struct cyc_udp_slot {
+typedef struct fmx_udp_slot {
     bool used;
     struct sockaddr_storage addr;
     socklen_t addr_len;
-    cyc_datagram *head;
-    cyc_datagram *tail;
+    fmx_datagram *head;
+    fmx_datagram *tail;
     size_t queued;
-} cyc_udp_slot;
+} fmx_udp_slot;
 
-typedef struct cyc_udp_hub {
-    cyc_fd fd;
+typedef struct fmx_udp_hub {
+    fmx_fd fd;
     int refs;
     bool closed;
     uint8_t *scratch;
-    cyc_udp_slot slots[CYC_UDP_MAX_PEERS];
-    size_t arrivals[CYC_UDP_MAX_PEERS];
+    fmx_udp_slot slots[FMX_UDP_MAX_PEERS];
+    size_t arrivals[FMX_UDP_MAX_PEERS];
     size_t arrival_head;
     size_t arrival_count;
-} cyc_udp_hub;
+} fmx_udp_hub;
 
-typedef struct cyc_udp {
-    cyc_fd fd;
+typedef struct fmx_udp {
+    fmx_fd fd;
     uint8_t *scratch;
     uint8_t *inbox;
     size_t inbox_len;
     bool holding;
     bool closed;
-} cyc_udp;
+} fmx_udp;
 
-typedef struct cyc_udp_peer {
-    cyc_udp_hub *hub;
+typedef struct fmx_udp_peer {
+    fmx_udp_hub *hub;
     size_t slot;
     bool closed;
-} cyc_udp_peer;
+} fmx_udp_peer;
 
 static struct addrinfo *resolve(const char *host, uint16_t port, bool passive) {
     struct addrinfo hints;
@@ -73,46 +73,46 @@ static struct addrinfo *resolve(const char *host, uint16_t port, bool passive) {
 
 /* ---- client transport --------------------------------------------------- */
 
-static cyc_transport_kind udp_kind(const cyc_transport *transport) {
+static fmx_transport_kind udp_kind(const fmx_transport *transport) {
     (void)transport;
-    return CYC_TRANSPORT_MESSAGE;
+    return FMX_TRANSPORT_MESSAGE;
 }
 
-static cyc_send_result udp_send(cyc_transport *transport, const uint8_t *bytes, size_t len,
+static fmx_send_result udp_send(fmx_transport *transport, const uint8_t *bytes, size_t len,
                                 size_t *accepted) {
-    cyc_udp *udp = (cyc_udp *)transport->state;
+    fmx_udp *udp = (fmx_udp *)transport->state;
     ptrdiff_t written;
 
     *accepted = 0;
     if (udp->closed) {
-        return CYC_SEND_CLOSED;
+        return FMX_SEND_CLOSED;
     }
-    if (len > CYC_MAX_DATAGRAM) {
-        return CYC_SEND_TOO_LARGE;
+    if (len > FMX_MAX_DATAGRAM) {
+        return FMX_SEND_TOO_LARGE;
     }
 
-    written = cyc_socket_send(udp->fd, bytes, len);
+    written = fmx_socket_send(udp->fd, bytes, len);
     if (written < 0) {
-        int error = cyc_socket_last_error();
-        if (cyc_socket_would_block(error)) {
-            return CYC_SEND_WOULD_BLOCK;
+        int error = fmx_socket_last_error();
+        if (fmx_socket_would_block(error)) {
+            return FMX_SEND_WOULD_BLOCK;
         }
-        if (cyc_socket_message_too_long(error)) {
-            return CYC_SEND_TOO_LARGE;
+        if (fmx_socket_message_too_long(error)) {
+            return FMX_SEND_TOO_LARGE;
         }
         udp->closed = true;
-        return CYC_SEND_ERROR;
+        return FMX_SEND_ERROR;
     }
     if ((size_t)written != len) {
-        return CYC_SEND_TOO_LARGE;
+        return FMX_SEND_TOO_LARGE;
     }
     *accepted = len;
-    return CYC_SEND_SENT;
+    return FMX_SEND_SENT;
 }
 
-static cyc_recv_result udp_recv(cyc_transport *transport, uint8_t *buffer, size_t cap,
+static fmx_recv_result udp_recv(fmx_transport *transport, uint8_t *buffer, size_t cap,
                                 size_t *received, size_t *needed) {
-    cyc_udp *udp = (cyc_udp *)transport->state;
+    fmx_udp *udp = (fmx_udp *)transport->state;
 
     *received = 0;
     *needed = 0;
@@ -120,16 +120,16 @@ static cyc_recv_result udp_recv(cyc_transport *transport, uint8_t *buffer, size_
     if (!udp->holding) {
         ptrdiff_t count;
         if (udp->closed) {
-            return CYC_RECV_CLOSED;
+            return FMX_RECV_CLOSED;
         }
-        count = cyc_socket_recv(udp->fd, udp->scratch, CYC_UDP_SCRATCH);
+        count = fmx_socket_recv(udp->fd, udp->scratch, FMX_UDP_SCRATCH);
         if (count < 0) {
-            int error = cyc_socket_last_error();
-            if (cyc_socket_would_block(error)) {
-                return CYC_RECV_WOULD_BLOCK;
+            int error = fmx_socket_last_error();
+            if (fmx_socket_would_block(error)) {
+                return FMX_RECV_WOULD_BLOCK;
             }
             udp->closed = true;
-            return CYC_RECV_ERROR;
+            return FMX_RECV_ERROR;
         }
         memcpy(udp->inbox, udp->scratch, (size_t)count);
         udp->inbox_len = (size_t)count;
@@ -138,81 +138,81 @@ static cyc_recv_result udp_recv(cyc_transport *transport, uint8_t *buffer, size_
 
     if (udp->inbox_len > cap) {
         *needed = udp->inbox_len;
-        return CYC_RECV_NEED_CAPACITY;
+        return FMX_RECV_NEED_CAPACITY;
     }
     if (udp->inbox_len > 0) {
         memcpy(buffer, udp->inbox, udp->inbox_len);
     }
     *received = udp->inbox_len;
     udp->holding = false;
-    return CYC_RECV_RECEIVED;
+    return FMX_RECV_RECEIVED;
 }
 
-static void udp_close_soft(cyc_transport *transport) {
+static void udp_close_soft(fmx_transport *transport) {
     (void)transport;
 }
 
-static void udp_close_hard(cyc_transport *transport) {
-    cyc_udp *udp = (cyc_udp *)transport->state;
+static void udp_close_hard(fmx_transport *transport) {
+    fmx_udp *udp = (fmx_udp *)transport->state;
     if (udp == NULL) {
         return;
     }
-    cyc_socket_close(udp->fd);
+    fmx_socket_close(udp->fd);
     free(udp->scratch);
     free(udp->inbox);
     free(udp);
     transport->state = NULL;
 }
 
-static const cyc_transport_vtable UDP_VTABLE = {udp_kind, udp_send, udp_recv, udp_close_soft,
+static const fmx_transport_vtable UDP_VTABLE = {udp_kind, udp_send, udp_recv, udp_close_soft,
                                                 udp_close_hard};
 
-cyc_result cyc_udp_connect(const char *host, uint16_t port, cyc_transport *out) {
+fmx_result fmx_udp_connect(const char *host, uint16_t port, fmx_transport *out) {
     struct addrinfo *candidates;
     struct addrinfo *candidate;
 
-    cyc_net_startup();
+    fmx_net_startup();
     candidates = resolve(host, port, false);
     if (candidates == NULL) {
-        return CYC_ERR_INVALID;
+        return FMX_ERR_INVALID;
     }
 
     for (candidate = candidates; candidate != NULL; candidate = candidate->ai_next) {
-        cyc_udp *udp;
-        cyc_fd fd = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
-        if (fd == CYC_INVALID_FD) {
+        fmx_udp *udp;
+        fmx_fd fd = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
+        if (fd == FMX_INVALID_FD) {
             continue;
         }
         if (connect(fd, candidate->ai_addr, (socklen_t)candidate->ai_addrlen) != 0 ||
-            !cyc_socket_set_nonblocking(fd)) {
-            cyc_socket_close(fd);
+            !fmx_socket_set_nonblocking(fd)) {
+            fmx_socket_close(fd);
             continue;
         }
-        udp = (cyc_udp *)calloc(1, sizeof(*udp));
+        udp = (fmx_udp *)calloc(1, sizeof(*udp));
         if (udp == NULL) {
-            cyc_socket_close(fd);
+            fmx_socket_close(fd);
             freeaddrinfo(candidates);
-            return CYC_ERR_NO_MEMORY;
+            return FMX_ERR_NO_MEMORY;
         }
         udp->fd = fd;
-        udp->scratch = (uint8_t *)malloc(CYC_UDP_SCRATCH);
-        udp->inbox = (uint8_t *)malloc(CYC_UDP_SCRATCH);
+        udp->scratch = (uint8_t *)malloc(FMX_UDP_SCRATCH);
+        udp->inbox = (uint8_t *)malloc(FMX_UDP_SCRATCH);
         if (udp->scratch == NULL || udp->inbox == NULL) {
             free(udp->scratch);
             free(udp->inbox);
             free(udp);
-            cyc_socket_close(fd);
+            fmx_socket_close(fd);
             freeaddrinfo(candidates);
-            return CYC_ERR_NO_MEMORY;
+            return FMX_ERR_NO_MEMORY;
         }
         out->vtable = &UDP_VTABLE;
         out->state = udp;
         freeaddrinfo(candidates);
-        return CYC_OK;
+        return FMX_OK;
     }
 
     freeaddrinfo(candidates);
-    return CYC_ERR_INVALID;
+    return FMX_ERR_INVALID;
 }
 
 /* ---- server hub --------------------------------------------------------- */
@@ -237,10 +237,10 @@ static bool same_address(const struct sockaddr_storage *left, socklen_t left_len
     return false;
 }
 
-static void slot_clear(cyc_udp_slot *slot) {
-    cyc_datagram *walk = slot->head;
+static void slot_clear(fmx_udp_slot *slot) {
+    fmx_datagram *walk = slot->head;
     while (walk != NULL) {
-        cyc_datagram *next = walk->next;
+        fmx_datagram *next = walk->next;
         free(walk);
         walk = next;
     }
@@ -250,26 +250,26 @@ static void slot_clear(cyc_udp_slot *slot) {
     slot->used = false;
 }
 
-static void hub_release(cyc_udp_hub *hub) {
+static void hub_release(fmx_udp_hub *hub) {
     size_t index;
 
     hub->refs -= 1;
     if (hub->refs > 0) {
         return;
     }
-    for (index = 0; index < CYC_UDP_MAX_PEERS; ++index) {
+    for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
         slot_clear(&hub->slots[index]);
     }
-    cyc_socket_close(hub->fd);
+    fmx_socket_close(hub->fd);
     free(hub->scratch);
     free(hub);
 }
 
-static void slot_enqueue(cyc_udp_slot *slot, const uint8_t *bytes, size_t len) {
-    cyc_datagram *datagram;
+static void slot_enqueue(fmx_udp_slot *slot, const uint8_t *bytes, size_t len) {
+    fmx_datagram *datagram;
 
-    if (slot->queued >= CYC_UDP_MAX_QUEUED) {
-        cyc_datagram *oldest = slot->head;
+    if (slot->queued >= FMX_UDP_MAX_QUEUED) {
+        fmx_datagram *oldest = slot->head;
         if (oldest != NULL) {
             slot->head = oldest->next;
             if (slot->head == NULL) {
@@ -280,7 +280,7 @@ static void slot_enqueue(cyc_udp_slot *slot, const uint8_t *bytes, size_t len) {
         }
     }
 
-    datagram = (cyc_datagram *)malloc(sizeof(cyc_datagram) + len);
+    datagram = (fmx_datagram *)malloc(sizeof(fmx_datagram) + len);
     if (datagram == NULL) {
         return;
     }
@@ -298,27 +298,27 @@ static void slot_enqueue(cyc_udp_slot *slot, const uint8_t *bytes, size_t len) {
     slot->queued += 1;
 }
 
-static void hub_pump(cyc_udp_hub *hub) {
+static void hub_pump(fmx_udp_hub *hub) {
     size_t round;
 
     if (hub->closed) {
         return;
     }
-    for (round = 0; round < CYC_UDP_MAX_READS; ++round) {
+    for (round = 0; round < FMX_UDP_MAX_READS; ++round) {
         struct sockaddr_storage from;
         socklen_t from_len = (socklen_t)sizeof(from);
         ptrdiff_t count;
         size_t index;
-        size_t chosen = CYC_UDP_MAX_PEERS;
+        size_t chosen = FMX_UDP_MAX_PEERS;
 
         memset(&from, 0, sizeof(from));
-        count = cyc_socket_recvfrom(hub->fd, hub->scratch, CYC_UDP_SCRATCH,
+        count = fmx_socket_recvfrom(hub->fd, hub->scratch, FMX_UDP_SCRATCH,
                                     (struct sockaddr *)&from, &from_len);
         if (count < 0) {
             return;
         }
 
-        for (index = 0; index < CYC_UDP_MAX_PEERS; ++index) {
+        for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
             if (hub->slots[index].used &&
                 same_address(&hub->slots[index].addr, hub->slots[index].addr_len, &from,
                              from_len)) {
@@ -327,14 +327,14 @@ static void hub_pump(cyc_udp_hub *hub) {
             }
         }
 
-        if (chosen == CYC_UDP_MAX_PEERS) {
-            for (index = 0; index < CYC_UDP_MAX_PEERS; ++index) {
+        if (chosen == FMX_UDP_MAX_PEERS) {
+            for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
                 if (!hub->slots[index].used) {
                     chosen = index;
                     break;
                 }
             }
-            if (chosen == CYC_UDP_MAX_PEERS) {
+            if (chosen == FMX_UDP_MAX_PEERS) {
                 continue;
             }
             hub->slots[chosen].used = true;
@@ -343,8 +343,8 @@ static void hub_pump(cyc_udp_hub *hub) {
             hub->slots[chosen].head = NULL;
             hub->slots[chosen].tail = NULL;
             hub->slots[chosen].queued = 0;
-            if (hub->arrival_count < CYC_UDP_MAX_PEERS) {
-                size_t at = (hub->arrival_head + hub->arrival_count) % CYC_UDP_MAX_PEERS;
+            if (hub->arrival_count < FMX_UDP_MAX_PEERS) {
+                size_t at = (hub->arrival_head + hub->arrival_count) % FMX_UDP_MAX_PEERS;
                 hub->arrivals[at] = chosen;
                 hub->arrival_count += 1;
             }
@@ -354,66 +354,66 @@ static void hub_pump(cyc_udp_hub *hub) {
     }
 }
 
-static cyc_transport_kind udp_peer_kind(const cyc_transport *transport) {
+static fmx_transport_kind udp_peer_kind(const fmx_transport *transport) {
     (void)transport;
-    return CYC_TRANSPORT_MESSAGE;
+    return FMX_TRANSPORT_MESSAGE;
 }
 
-static cyc_send_result udp_peer_send(cyc_transport *transport, const uint8_t *bytes, size_t len,
+static fmx_send_result udp_peer_send(fmx_transport *transport, const uint8_t *bytes, size_t len,
                                      size_t *accepted) {
-    cyc_udp_peer *peer = (cyc_udp_peer *)transport->state;
-    cyc_udp_slot *slot;
+    fmx_udp_peer *peer = (fmx_udp_peer *)transport->state;
+    fmx_udp_slot *slot;
     ptrdiff_t written;
 
     *accepted = 0;
     if (peer->closed || peer->hub->closed) {
-        return CYC_SEND_CLOSED;
+        return FMX_SEND_CLOSED;
     }
-    if (len > CYC_MAX_DATAGRAM) {
-        return CYC_SEND_TOO_LARGE;
+    if (len > FMX_MAX_DATAGRAM) {
+        return FMX_SEND_TOO_LARGE;
     }
 
     slot = &peer->hub->slots[peer->slot];
-    written = cyc_socket_sendto(peer->hub->fd, bytes, len,
+    written = fmx_socket_sendto(peer->hub->fd, bytes, len,
                                 (const struct sockaddr *)&slot->addr, slot->addr_len);
     if (written < 0) {
-        int error = cyc_socket_last_error();
-        if (cyc_socket_would_block(error)) {
-            return CYC_SEND_WOULD_BLOCK;
+        int error = fmx_socket_last_error();
+        if (fmx_socket_would_block(error)) {
+            return FMX_SEND_WOULD_BLOCK;
         }
-        if (cyc_socket_message_too_long(error)) {
-            return CYC_SEND_TOO_LARGE;
+        if (fmx_socket_message_too_long(error)) {
+            return FMX_SEND_TOO_LARGE;
         }
-        return CYC_SEND_ERROR;
+        return FMX_SEND_ERROR;
     }
     if ((size_t)written != len) {
-        return CYC_SEND_TOO_LARGE;
+        return FMX_SEND_TOO_LARGE;
     }
     *accepted = len;
-    return CYC_SEND_SENT;
+    return FMX_SEND_SENT;
 }
 
-static cyc_recv_result udp_peer_recv(cyc_transport *transport, uint8_t *buffer, size_t cap,
+static fmx_recv_result udp_peer_recv(fmx_transport *transport, uint8_t *buffer, size_t cap,
                                      size_t *received, size_t *needed) {
-    cyc_udp_peer *peer = (cyc_udp_peer *)transport->state;
-    cyc_udp_slot *slot;
-    cyc_datagram *front;
+    fmx_udp_peer *peer = (fmx_udp_peer *)transport->state;
+    fmx_udp_slot *slot;
+    fmx_datagram *front;
 
     *received = 0;
     *needed = 0;
     if (peer->closed) {
-        return CYC_RECV_CLOSED;
+        return FMX_RECV_CLOSED;
     }
 
     hub_pump(peer->hub);
     slot = &peer->hub->slots[peer->slot];
     front = slot->head;
     if (front == NULL) {
-        return CYC_RECV_WOULD_BLOCK;
+        return FMX_RECV_WOULD_BLOCK;
     }
     if (front->len > cap) {
         *needed = front->len;
-        return CYC_RECV_NEED_CAPACITY;
+        return FMX_RECV_NEED_CAPACITY;
     }
     if (front->len > 0) {
         memcpy(buffer, front->bytes, front->len);
@@ -425,15 +425,15 @@ static cyc_recv_result udp_peer_recv(cyc_transport *transport, uint8_t *buffer, 
     }
     slot->queued -= 1;
     free(front);
-    return CYC_RECV_RECEIVED;
+    return FMX_RECV_RECEIVED;
 }
 
-static void udp_peer_close_soft(cyc_transport *transport) {
+static void udp_peer_close_soft(fmx_transport *transport) {
     (void)transport;
 }
 
-static void udp_peer_close_hard(cyc_transport *transport) {
-    cyc_udp_peer *peer = (cyc_udp_peer *)transport->state;
+static void udp_peer_close_hard(fmx_transport *transport) {
+    fmx_udp_peer *peer = (fmx_udp_peer *)transport->state;
     if (peer == NULL) {
         return;
     }
@@ -443,36 +443,36 @@ static void udp_peer_close_hard(cyc_transport *transport) {
     transport->state = NULL;
 }
 
-static const cyc_transport_vtable UDP_PEER_VTABLE = {udp_peer_kind, udp_peer_send, udp_peer_recv,
+static const fmx_transport_vtable UDP_PEER_VTABLE = {udp_peer_kind, udp_peer_send, udp_peer_recv,
                                                      udp_peer_close_soft, udp_peer_close_hard};
 
-static cyc_accept_result udp_accept(cyc_listener *listener, cyc_transport *out) {
-    cyc_udp_hub *hub = (cyc_udp_hub *)listener->state;
-    cyc_udp_peer *peer;
+static fmx_accept_result udp_accept(fmx_listener *listener, fmx_transport *out) {
+    fmx_udp_hub *hub = (fmx_udp_hub *)listener->state;
+    fmx_udp_peer *peer;
     size_t slot;
 
     hub_pump(hub);
     if (hub->arrival_count == 0) {
-        return CYC_ACCEPT_PENDING;
+        return FMX_ACCEPT_PENDING;
     }
     slot = hub->arrivals[hub->arrival_head];
-    hub->arrival_head = (hub->arrival_head + 1) % CYC_UDP_MAX_PEERS;
+    hub->arrival_head = (hub->arrival_head + 1) % FMX_UDP_MAX_PEERS;
     hub->arrival_count -= 1;
 
-    peer = (cyc_udp_peer *)calloc(1, sizeof(*peer));
+    peer = (fmx_udp_peer *)calloc(1, sizeof(*peer));
     if (peer == NULL) {
-        return CYC_ACCEPT_ERROR;
+        return FMX_ACCEPT_ERROR;
     }
     peer->hub = hub;
     peer->slot = slot;
     hub->refs += 1;
     out->vtable = &UDP_PEER_VTABLE;
     out->state = peer;
-    return CYC_ACCEPT_ACCEPTED;
+    return FMX_ACCEPT_ACCEPTED;
 }
 
-static void udp_listener_close(cyc_listener *listener) {
-    cyc_udp_hub *hub = (cyc_udp_hub *)listener->state;
+static void udp_listener_close(fmx_listener *listener) {
+    fmx_udp_hub *hub = (fmx_udp_hub *)listener->state;
     if (hub == NULL) {
         return;
     }
@@ -481,58 +481,58 @@ static void udp_listener_close(cyc_listener *listener) {
     listener->state = NULL;
 }
 
-static const cyc_listener_vtable UDP_LISTENER_VTABLE = {udp_accept, udp_listener_close};
+static const fmx_listener_vtable UDP_LISTENER_VTABLE = {udp_accept, udp_listener_close};
 
-cyc_result cyc_udp_listen(const char *host, uint16_t port, cyc_listener *out) {
+fmx_result fmx_udp_listen(const char *host, uint16_t port, fmx_listener *out) {
     struct addrinfo *candidates;
     struct addrinfo *candidate;
 
-    cyc_net_startup();
+    fmx_net_startup();
     candidates = resolve(host, port, true);
     if (candidates == NULL) {
-        return CYC_ERR_INVALID;
+        return FMX_ERR_INVALID;
     }
 
     for (candidate = candidates; candidate != NULL; candidate = candidate->ai_next) {
-        cyc_udp_hub *hub;
-        cyc_fd fd = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
-        if (fd == CYC_INVALID_FD) {
+        fmx_udp_hub *hub;
+        fmx_fd fd = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
+        if (fd == FMX_INVALID_FD) {
             continue;
         }
         if (bind(fd, candidate->ai_addr, (socklen_t)candidate->ai_addrlen) != 0 ||
-            !cyc_socket_set_nonblocking(fd)) {
-            cyc_socket_close(fd);
+            !fmx_socket_set_nonblocking(fd)) {
+            fmx_socket_close(fd);
             continue;
         }
-        hub = (cyc_udp_hub *)calloc(1, sizeof(*hub));
+        hub = (fmx_udp_hub *)calloc(1, sizeof(*hub));
         if (hub == NULL) {
-            cyc_socket_close(fd);
+            fmx_socket_close(fd);
             freeaddrinfo(candidates);
-            return CYC_ERR_NO_MEMORY;
+            return FMX_ERR_NO_MEMORY;
         }
-        hub->scratch = (uint8_t *)malloc(CYC_UDP_SCRATCH);
+        hub->scratch = (uint8_t *)malloc(FMX_UDP_SCRATCH);
         if (hub->scratch == NULL) {
             free(hub);
-            cyc_socket_close(fd);
+            fmx_socket_close(fd);
             freeaddrinfo(candidates);
-            return CYC_ERR_NO_MEMORY;
+            return FMX_ERR_NO_MEMORY;
         }
         hub->fd = fd;
         hub->refs = 1;
         out->vtable = &UDP_LISTENER_VTABLE;
         out->state = hub;
         freeaddrinfo(candidates);
-        return CYC_OK;
+        return FMX_OK;
     }
 
     freeaddrinfo(candidates);
-    return CYC_ERR_INVALID;
+    return FMX_ERR_INVALID;
 }
 
-uint16_t cyc_udp_listener_port(const cyc_listener *listener) {
-    const cyc_udp_hub *hub = (const cyc_udp_hub *)listener->state;
+uint16_t fmx_udp_listener_port(const fmx_listener *listener) {
+    const fmx_udp_hub *hub = (const fmx_udp_hub *)listener->state;
     if (hub == NULL) {
         return 0;
     }
-    return cyc_socket_port(hub->fd);
+    return fmx_socket_port(hub->fd);
 }

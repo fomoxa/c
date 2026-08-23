@@ -1,35 +1,35 @@
-#include "cyclone/schema.h"
+#include "fomoxa/schema.h"
 
-cyc_result cyc_schema_check(const cyc_schema *schema) {
+fmx_result fmx_schema_check(const fmx_schema *schema) {
     size_t index;
 
     if (schema == NULL || (schema->messages == NULL && schema->message_count > 0)) {
-        return CYC_ERR_INVALID;
+        return FMX_ERR_INVALID;
     }
-    if (schema->message_count > CYC_MAX_SCHEMA_MESSAGES) {
-        return CYC_ERR_INVALID;
+    if (schema->message_count > FMX_MAX_SCHEMA_MESSAGES) {
+        return FMX_ERR_INVALID;
     }
 
     for (index = 0; index < schema->message_count; ++index) {
-        const cyc_message_schema *message = &schema->messages[index];
+        const fmx_message_schema *message = &schema->messages[index];
         if (message->prefix_count > (size_t)UINT16_MAX) {
-            return CYC_ERR_INVALID;
+            return FMX_ERR_INVALID;
         }
         if (message->prefix_count > 0 && message->prefixes == NULL) {
-            return CYC_ERR_INVALID;
+            return FMX_ERR_INVALID;
         }
         if (message->prefix_count > 0 &&
             message->prefixes[message->prefix_count - 1] != message->fingerprint) {
-            return CYC_ERR_INVALID;
+            return FMX_ERR_INVALID;
         }
         if (index > 0 && schema->messages[index - 1].id >= message->id) {
-            return CYC_ERR_INVALID;
+            return FMX_ERR_INVALID;
         }
     }
-    return CYC_OK;
+    return FMX_OK;
 }
 
-const cyc_message_schema *cyc_schema_message(const cyc_schema *schema, uint32_t id) {
+const fmx_message_schema *fmx_schema_message(const fmx_schema *schema, uint32_t id) {
     size_t low = 0;
     size_t high;
 
@@ -51,14 +51,14 @@ const cyc_message_schema *cyc_schema_message(const cyc_schema *schema, uint32_t 
     return NULL;
 }
 
-uint16_t cyc_message_field_count(const cyc_message_schema *message) {
+uint16_t fmx_message_field_count(const fmx_message_schema *message) {
     if (message == NULL) {
         return 0;
     }
     return (uint16_t)message->prefix_count;
 }
 
-bool cyc_message_prefix(const cyc_message_schema *message, uint16_t field_count, uint64_t *out) {
+bool fmx_message_prefix(const fmx_message_schema *message, uint16_t field_count, uint64_t *out) {
     if (message == NULL || field_count == 0 || (size_t)field_count > message->prefix_count) {
         return false;
     }

@@ -2,11 +2,11 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "cyc_test.h"
+#include "fmx_test.h"
 
-#include "cyclone/net.h"
+#include "fomoxa/net.h"
 
-#include "game_message_cyclone.h"
+#include "game_message_fomoxa.h"
 #include "game_message_state.h"
 #include "player_input_input.h"
 #include "schema.h"
@@ -52,13 +52,13 @@ static struct PlayerInput sample_input(void) {
 }
 
 static void a_generated_codec_travels_over_a_real_socket(void) {
-    const cyc_schema *schema = demo_schema();
-    cyc_listener listener;
-    cyc_transport transport;
-    cyc_server *server;
-    cyc_connection *connection;
-    CycloneWriter writer;
-    CycloneReader reader;
+    const fmx_schema *schema = demo_schema();
+    fmx_listener listener;
+    fmx_transport transport;
+    fmx_server *server;
+    fmx_connection *connection;
+    FomoxaWriter writer;
+    FomoxaReader reader;
     struct GameMessage received_state;
     struct PlayerInput received_input;
     bool got_state = false;
@@ -72,44 +72,44 @@ static void a_generated_codec_travels_over_a_real_socket(void) {
     memset(&received_state, 0, sizeof(received_state));
     memset(&received_input, 0, sizeof(received_input));
 
-    CYC_CHECK(cyc_tcp_listen("127.0.0.1", 0, &listener) == CYC_OK);
-    port = cyc_tcp_listener_port(&listener);
-    server = cyc_server_create(listener, schema, NULL);
-    CYC_CHECK(cyc_tcp_connect("127.0.0.1", port, &transport) == CYC_OK);
-    connection = cyc_connection_create(transport, schema, NULL, cyc_now_ms());
+    FMX_CHECK(fmx_tcp_listen("127.0.0.1", 0, &listener) == FMX_OK);
+    port = fmx_tcp_listener_port(&listener);
+    server = fmx_server_create(listener, schema, NULL);
+    FMX_CHECK(fmx_tcp_connect("127.0.0.1", port, &transport) == FMX_OK);
+    connection = fmx_connection_create(transport, schema, NULL, fmx_now_ms());
 
     for (round = 0; round < 200 && !(got_state && got_input); ++round) {
-        const cyc_event *events;
+        const fmx_event *events;
         size_t count;
         size_t index;
-        uint64_t now = cyc_now_ms();
+        uint64_t now = fmx_now_ms();
 
-        count = cyc_connection_tick(connection, now);
-        events = cyc_connection_events(connection, &count);
+        count = fmx_connection_tick(connection, now);
+        events = fmx_connection_events(connection, &count);
         for (index = 0; index < count; ++index) {
-            if (events[index].kind == CYC_EVENT_READY) {
+            if (events[index].kind == FMX_EVENT_READY) {
                 client_ready = true;
-            } else if (events[index].kind == CYC_EVENT_MESSAGE &&
+            } else if (events[index].kind == FMX_EVENT_MESSAGE &&
                        events[index].message_id == GAME_MESSAGE_STATE_MESSAGE_ID) {
-                cyclone_reader_init(&reader, events[index].payload, events[index].payload_len,
-                                    cyclone_limits_unlimited());
-                CYC_CHECK(GameMessageStateCodec_decode(&reader, &received_state).kind ==
-                          CYCLONE_DECODE_OK);
+                fomoxa_reader_init(&reader, events[index].payload, events[index].payload_len,
+                                    fomoxa_limits_unlimited());
+                FMX_CHECK(GameMessageStateCodec_decode(&reader, &received_state).kind ==
+                          FOMOXA_DECODE_OK);
                 got_state = true;
             }
         }
 
-        count = cyc_server_tick(server, now);
-        events = cyc_server_events(server, &count);
+        count = fmx_server_tick(server, now);
+        events = fmx_server_events(server, &count);
         for (index = 0; index < count; ++index) {
-            if (events[index].kind == CYC_EVENT_READY) {
+            if (events[index].kind == FMX_EVENT_READY) {
                 peer = events[index].peer;
-            } else if (events[index].kind == CYC_EVENT_MESSAGE &&
+            } else if (events[index].kind == FMX_EVENT_MESSAGE &&
                        events[index].message_id == PLAYER_INPUT_INPUT_MESSAGE_ID) {
-                cyclone_reader_init(&reader, events[index].payload, events[index].payload_len,
-                                    cyclone_limits_unlimited());
-                CYC_CHECK(PlayerInputInputCodec_decode(&reader, &received_input).kind ==
-                          CYCLONE_DECODE_OK);
+                fomoxa_reader_init(&reader, events[index].payload, events[index].payload_len,
+                                    fomoxa_limits_unlimited());
+                FMX_CHECK(PlayerInputInputCodec_decode(&reader, &received_input).kind ==
+                          FOMOXA_DECODE_OK);
                 got_input = true;
             }
         }
@@ -118,41 +118,41 @@ static void a_generated_codec_travels_over_a_real_socket(void) {
             struct GameMessage state = sample_state();
             struct PlayerInput input = sample_input();
 
-            cyclone_writer_init(&writer);
-            CYC_CHECK(PlayerInputInputCodec_encode(&writer, &input));
-            CYC_CHECK(cyc_connection_send(connection, PLAYER_INPUT_INPUT_MESSAGE_ID, writer.data,
-                                          writer.len) == CYC_OK);
-            cyclone_writer_free(&writer);
+            fomoxa_writer_init(&writer);
+            FMX_CHECK(PlayerInputInputCodec_encode(&writer, &input));
+            FMX_CHECK(fmx_connection_send(connection, PLAYER_INPUT_INPUT_MESSAGE_ID, writer.data,
+                                          writer.len) == FMX_OK);
+            fomoxa_writer_free(&writer);
 
-            cyclone_writer_init(&writer);
-            CYC_CHECK(GameMessageStateCodec_encode(&writer, &state));
-            CYC_CHECK(cyc_server_send(server, peer, GAME_MESSAGE_STATE_MESSAGE_ID, writer.data,
-                                      writer.len) == CYC_OK);
-            cyclone_writer_free(&writer);
+            fomoxa_writer_init(&writer);
+            FMX_CHECK(GameMessageStateCodec_encode(&writer, &state));
+            FMX_CHECK(fmx_server_send(server, peer, GAME_MESSAGE_STATE_MESSAGE_ID, writer.data,
+                                      writer.len) == FMX_OK);
+            fomoxa_writer_free(&writer);
             sent = true;
         }
         nap();
     }
 
-    CYC_CHECK(got_input);
-    CYC_CHECK(received_input.tick == 1234567890123ull);
-    CYC_CHECK(received_input.firing);
-    CYC_CHECK(received_input.direction.y == 1.5f);
+    FMX_CHECK(got_input);
+    FMX_CHECK(received_input.tick == 1234567890123ull);
+    FMX_CHECK(received_input.firing);
+    FMX_CHECK(received_input.direction.y == 1.5f);
 
-    CYC_CHECK(got_state);
-    CYC_CHECK(received_state.player_id == 42);
-    CYC_CHECK(received_state.player_name != NULL &&
+    FMX_CHECK(got_state);
+    FMX_CHECK(received_state.player_id == 42);
+    FMX_CHECK(received_state.player_name != NULL &&
               strcmp(received_state.player_name, "Xin ch\xC3\xA0o") == 0);
-    CYC_CHECK(received_state.position.x == 10.5f);
-    CYC_CHECK(received_state.is_alive);
-    CYC_CHECK(received_state.last_seen_at == 0);
+    FMX_CHECK(received_state.position.x == 10.5f);
+    FMX_CHECK(received_state.is_alive);
+    FMX_CHECK(received_state.last_seen_at == 0);
 
     GameMessage_free(&received_state);
-    cyc_connection_destroy(connection);
-    cyc_server_destroy(server);
+    fmx_connection_destroy(connection);
+    fmx_server_destroy(server);
 }
 
 int main(void) {
-    CYC_RUN(a_generated_codec_travels_over_a_real_socket);
-    CYC_DONE();
+    FMX_RUN(a_generated_codec_travels_over_a_real_socket);
+    FMX_DONE();
 }
