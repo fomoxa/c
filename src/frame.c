@@ -284,3 +284,13 @@ size_t fmx_stream_decoder_buffered(const fmx_stream_decoder *decoder) {
 bool fmx_stream_decoder_poisoned(const fmx_stream_decoder *decoder) {
     return decoder->poison != FMX_FRAME_OK;
 }
+
+void fmx_stream_decoder_shrink(fmx_stream_decoder *decoder) {
+    if (decoder->len - decoder->start == 0 && decoder->cap > 0) {
+        free(decoder->buf);
+        decoder->buf = NULL;
+        decoder->cap = 0;
+        decoder->len = 0;
+        decoder->start = 0;
+    }
+}

@@ -4,14 +4,14 @@
 
 This repository is the Fomoxa runtime implementation for C and C++.
 It implements framing, the schema handshake, heartbeat, and a non-blocking TCP/UDP tick loop, as defined by the Fomoxa protocol specification.
-The C library is written in C99 and has no external dependency, no threading, and no background execution of any kind; every operation runs to completion inside a call the application makes.
+The C library is written in C99. It has no external dependency, no threads, and no background work: every operation runs to completion inside a call the application makes.
 An optional C++17 header-only wrapper (`include/fomoxa/net.hpp`) provides RAII ownership and iterator-based event access over the same C API.
-The library contains no wire-format codec: encoding and decoding of application messages is generated separately by `fomoxac` into the consumer's own project.
+The library contains no wire-format codec. `fomoxac` generates the encoding and decoding of application messages separately, into the consumer's own project.
 
-## 2. Authoritative References
+## 2. Authoritative references
 
-The behavior of this library is defined by the documents below, not by this file.
-Where this library and any other Fomoxa SDK disagree on behavior, the referenced documents decide, and agreement between two implementations does not by itself establish correctness.
+The documents below define the behavior of this library.
+Where this library and another Fomoxa SDK disagree, those documents decide, and two implementations that agree with each other are not correct for that reason alone.
 
 | Document | Scope |
 |---|---|
@@ -88,22 +88,22 @@ The project version, used above, is `0.1.0`, declared in `CMakeLists.txt`.
 
 ### 4.4 The annotation header is not installed
 
-`include/fomoxa.h` defines the three annotation markers `FOMOXA_MODEL`, `FOMOXA_FIELD(type)` and `FOMOXA_CODEC(...)` that `fomoxac` reads out of a consumer's model sources; all three expand to nothing.
-`CMakeLists.txt` installs only the `include/fomoxa/` subdirectory, not all of `include/`, so `include/fomoxa.h` is deliberately excluded from both the CMake install and the `FetchContent`/`find_package` interface.
-The comment at the install rule in `CMakeLists.txt` explains the reasoning: the header holds only source-text markers that `fomoxac` reads at generation time, no compiled byte of the library refers to them, and it is meant to be copied into a consumer's own project rather than linked against, the same role the `fomoxa-attributes` crate plays for the Rust SDK.
+`include/fomoxa.h` defines the three annotation markers `FOMOXA_MODEL`, `FOMOXA_FIELD(type)` and `FOMOXA_CODEC(...)` that `fomoxac` reads from a consumer's model sources; all three expand to nothing.
+`CMakeLists.txt` installs only the `include/fomoxa/` subdirectory, so `include/fomoxa.h` is left out of both the CMake install and the `FetchContent`/`find_package` interface on purpose.
+The comment at the install rule in `CMakeLists.txt` gives the reason: the header holds only source-text markers that `fomoxac` reads at generation time, and no compiled byte of the library refers to them. It is meant to be copied into a consumer's project, the role the `fomoxa-attributes` crate plays for the Rust SDK.
 A consumer must copy `include/fomoxa.h` into their own source tree; `scripts/package-test.sh` asserts as part of CI that this file is absent from the installed prefix.
 
 ### 4.5 Makefile install
 
 The plain `make install` target (see §6) installs the library and headers under a `PREFIX` (default `/usr/local`) without CMake, and applies the same exclusion: its comment states that `include/fomoxa.h` must never be swept in by widening its glob to `include/*.h`.
 
-## 5. Build System
+## 5. Build system
 
 `Makefile`, at the repository root, is the canonical build.
-`CMakeLists.txt` exists for exactly one purpose, stated in its own comment: letting a consuming project `find_package(fomoxa)` or `FetchContent` it and link `fomoxa::fomoxa` without hand-copying headers and without needing to know that Windows requires `ws2_32`.
-CMake deliberately builds no tests; `tests/package/` is a separate consumer project that CI configures against an installed result, not against the source tree.
+`CMakeLists.txt` has one purpose, stated in its own comment: to let a consuming project `find_package(fomoxa)` or `FetchContent` it and link `fomoxa::fomoxa`, without copying headers by hand or knowing that Windows requires `ws2_32`.
+CMake builds no tests. `tests/package/` is a separate consumer project that CI configures against an installed result, never against the source tree.
 
-Both build files read the source list from `sources.txt`, one path per line, so the two never carry two lists that drift apart:
+Both build files read the source list from `sources.txt`, one path per line, so they cannot drift apart:
 
 ```
 src/common.c
@@ -120,7 +120,7 @@ src/transport/tcp.c
 src/transport/udp.c
 ```
 
-## 6. Building From Source (C)
+## 6. Building from source (C)
 
 ```sh
 make          # build build/libfomoxa.a
@@ -133,10 +133,10 @@ make install  # install to PREFIX (default /usr/local)
 The library compiles as C99 with `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith -Werror`.
 `make sanitize` rebuilds from clean and reruns every test under `-fsanitize=address,undefined`.
 
-## 7. Building From Source (C++)
+## 7. Building from source (C++)
 
-The C++ wrapper (`include/fomoxa/net.hpp`), its test (`tests/test_cpp.cpp`) and its examples (`examples/echo_client_cpp.cpp`, `examples/echo_server_cpp.cpp`) are an optional layer on top of the C library, isolated in the Makefile between two marker comments.
-No C source, target, or compiler flag depends on any of it, and the build skips this layer automatically when a C++ compiler is unavailable, so `make test` still succeeds on a machine that has `cc` but no `c++`.
+The C++ wrapper (`include/fomoxa/net.hpp`), its test (`tests/test_cpp.cpp`) and its examples (`examples/echo_client_cpp.cpp`, `examples/echo_server_cpp.cpp`) are an optional layer on top of the C library, kept apart in the Makefile between two marker comments.
+No C source, target, or compiler flag depends on it, and the build skips it when no C++ compiler is available, so `make test` still succeeds on a machine that has `cc` but no `c++`.
 
 ```sh
 make test      # also builds and runs tests/test_cpp.cpp when a C++ compiler is present
@@ -145,7 +145,7 @@ make examples  # also builds the C++ echo client/server when a C++ compiler and 
 
 The wrapper compiles as C++17 with `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion -Werror`.
 
-## 8. Quick Start (C)
+## 8. Quick start (C)
 
 ### 8.1 Client
 
@@ -216,7 +216,7 @@ make examples
 ./build/examples/echo_client
 ```
 
-## 9. Quick Start (C++)
+## 9. Quick start (C++)
 
 ```cpp
 #include "fomoxa/net.hpp"
@@ -251,23 +251,23 @@ while (!connection->closed()) {
 `fomoxa::Events` is an iterable view over one tick's event list; `fomoxa::Event` wraps a single `fmx_event`, and `fomoxa::ByteView` is a non-owning `(data, size)` pair used for payload arguments and returned by `Event::payload()`.
 `examples/echo_client_cpp.cpp` and `examples/echo_server_cpp.cpp` are the C++ equivalents of the C examples, built by `make examples` when a C++ compiler is available.
 
-## 10. Ownership Rules
+## 10. Ownership rules
 
 - `fmx_connection` and `fmx_server` are opaque handles: `_create` allocates, `_destroy` frees.
   Everything else they need is allocated once at creation.
 - A `fmx_transport` handed to `fmx_connection_create` is owned by it from that moment: `_destroy` calls the transport's `close_hard`, which frees it.
   The same holds for a `fmx_listener` handed to `fmx_server_create`, and for every peer transport the listener accepts.
-- The `fmx_schema` passed in is borrowed, not copied.
+- The `fmx_schema` passed in is borrowed and never copied.
   It must outlive the connection or server; a `static` schema, as `examples/demo/src/schema.h` builds, satisfies this.
 - `fmx_event.payload` points into the connection's own buffer and is valid only until the next tick on that same connection.
   Retaining it longer requires copying it.
 
-## 11. Where the Codec Is
+## 11. Where the codec is
 
 No wire-format codec (RFC-0002 encoder/decoder) is implemented in this repository.
 `fomoxac` generates the RFC-0002 codec runtime (`FomoxaWriter`, `FomoxaReader`, `FomoxaDecodeError`, `FomoxaLimits`) into the consumer's own project, together with a codec per message and the fingerprint tables described below.
-There is exactly one implementation of RFC-0002 in C, and it lives in the generator; its conformance against the committed cross-SDK vectors is proved there, not in this repository.
-A second implementation of RFC-0002 in this library would be a second implementation of the same wire format in the same language, and RFC-0001 §6.1 notes that two independently maintained encoders can drift silently: both ends would still decode without error, but the produced bytes would stop matching.
+There is exactly one implementation of RFC-0002 in C, and it lives in the generator, which also checks it against the committed cross-SDK vectors.
+Another RFC-0002 implementation here would be a second encoder for the same wire format in the same language. RFC-0001 §6.1 notes that two independently maintained encoders can drift without any error: both ends keep decoding, while the bytes they produce stop matching.
 
 This library instead consumes two things `fomoxac` also generates:
 
@@ -283,7 +283,7 @@ for (index = 0; index < FOMOXA_MESSAGES_COUNT; ++index) {
 }
 ```
 
-Encoding is the generated codec's responsibility; this library only sees the bytes it produced.
+The generated codec does the encoding; this library only sees the bytes it produced.
 
 ```c
 FomoxaWriter writer;
@@ -293,7 +293,7 @@ fmx_connection_send(connection, GAME_MESSAGE_STATE_MESSAGE_ID, writer.data, writ
 fomoxa_writer_free(&writer);
 ```
 
-### 11.1 The Demo Project
+### 11.1 The demo project
 
 `examples/demo/` is a committed, working instance of this path.
 
@@ -314,7 +314,7 @@ examples/demo/
 ```
 
 The models mirror RFC-0002 §15's worked example: `GameMessage` (a `u32`, a `string`, a nested `Vector3` of three `f32`, another `u32`, and a `bool`), and `PlayerInput` in the other direction.
-`GameMessage.last_seen_at` is declared on the struct but carries no `FOMOXA_FIELD`/`FOMOXA_CODEC` annotation, so no codec writes or reads it; `tests/test_demo.c` asserts it arrives as `0` on the receiving side, illustrating that a struct's own fields, beyond what is annotated, remain the application's (RFC-0001 §6.6).
+`GameMessage.last_seen_at` is declared on the struct but carries no `FOMOXA_FIELD`/`FOMOXA_CODEC` annotation, so no codec writes or reads it. `tests/test_demo.c` asserts that it arrives as `0` on the receiving side: fields of a struct that are not annotated belong to the application (RFC-0001 §6.6).
 
 Regenerating after editing a model, from that directory, is:
 
@@ -322,9 +322,9 @@ Regenerating after editing a model, from that directory, is:
 fomoxac generate
 ```
 
-No CI job in this repository checks the generated tree for freshness; doing so would require installing a generator from outside this repository, and the stated goal of `.github/workflows/ci.yml` is that this repository builds and tests entirely on its own.
+No CI job in this repository checks whether the generated tree is current. That would need a generator installed from outside this repository, and `.github/workflows/ci.yml` states the goal that this repository builds and tests entirely on its own.
 
-## 12. Wire Format
+## 12. Wire format
 
 Every byte this library places on a transport is a frame, and every frame starts with a one-byte type.
 
@@ -335,7 +335,7 @@ Every byte this library places on a transport is a frame, and every frame starts
 | 2 | ACK | one byte, no body |
 | 3 | HANDSHAKE | 5-byte header, then an opaque payload |
 
-### 12.1 Data Frame
+### 12.1 Data frame
 
 ```
   +----+----+----+---------------+---------------+---------------------+
@@ -347,7 +347,7 @@ Every byte this library places on a transport is a frame, and every frame starts
 
 The message id is a message type assigned by the schema, not a sequence number; nothing in this library reorders, retransmits, or deduplicates frames.
 
-### 12.2 Handshake Frame
+### 12.2 Handshake frame
 
 ```
   +----+---------------+----------------------------+
@@ -356,19 +356,18 @@ The message id is a message type assigned by the schema, not a sequence number; 
   +----+---------------+----------------------------+
 ```
 
-### 12.3 Framing on a Byte Stream vs. a Packet
+### 12.3 Framing on a byte stream and on a packet
 
 On a stream, frames sit back to back with no separator, and `fmx_stream_decoder` decodes incrementally, so it can be fed as little as one byte at a time.
 A framing violation on a stream is fatal: there is no resynchronization point, so the decoder is poisoned permanently (`fmx_stream_decoder_poisoned`) and the session closes.
 
 On a packet transport, one packet holds exactly one frame; a short packet, or a packet with bytes left over after a complete frame, is treated as broken (`fmx_frame_decode_packet` returns `FMX_FRAME_TRUNCATED` or `FMX_FRAME_TRAILING`).
-A framing violation there is not fatal: the packet is dropped and the session continues, because a single datagram cannot corrupt any shared parsing state.
-This asymmetry between the two transport kinds is deliberate.
+A framing violation there is not fatal: the packet is dropped and the session continues, because a single datagram cannot corrupt any shared parsing state. The two transport kinds differ here on purpose.
 
-## 13. The Handshake
+## 13. The handshake
 
-The client sends one hello; the server is the only side that compares anything, and answers with a single verdict byte.
-The common case is one round; exactly one case requires a second.
+The client sends one hello. Only the server compares anything, and it answers with a single verdict byte.
+Most handshakes take one round; exactly one case needs a second.
 
 ```
   CLIENT                                         SERVER
@@ -382,7 +381,7 @@ The common case is one round; exactly one case requires a second.
     |  <-- HANDSHAKE(verdict, 1 byte) ----------- |
 ```
 
-### 13.1 Hello Payload
+### 13.1 Hello payload
 
 | Field | Size | Notes |
 |---|---|---|
@@ -393,7 +392,7 @@ The common case is one round; exactly one case requires a second.
 
 Total length equals `16 + 14 * message count` exactly; a hello of any other length is rejected as malformed.
 
-### 13.2 Verdict Byte
+### 13.2 Verdict byte
 
 | Byte | Meaning |
 |---|---|
@@ -404,7 +403,7 @@ Total length equals `16 + 14 * message count` exactly; a hello of any other leng
 | 4 | not a verdict: a request for more information (the query tag); it never ends the session |
 | >=5 | broken |
 
-### 13.3 How the Server Decides
+### 13.3 How the server decides
 
 If the two schema fingerprints match, the hello is accepted without reading a single entry.
 Otherwise, for each message id both sides declare, with `n_c` the client's field count and `n_s` the server's:
@@ -419,11 +418,11 @@ Otherwise, for each message id both sides declare, with `n_c` the client's field
 
 This implements RFC-0002 §9.1's prefix test: comparing at `k = min(n_c, n_s)` checks whether the shorter field list is an exact prefix of the longer one.
 
-Different schemas are still accepted as long as, wherever the two overlap, they agree; identity of the two schemas is not required.
-A peer that knows messages the other does not, or that carries extra fields at the end of a shared message, connects normally, which is what RFC-0002 §9.1 requires for such peers to interoperate.
+Two different schemas are accepted as long as they agree wherever they overlap.
+A peer that knows messages the other does not, or that carries extra fields at the end of a shared message, connects normally, as RFC-0002 §9.1 requires for such peers to interoperate.
 Only two different fields at the same index inside the shared part are refused, and one such message refuses the whole session.
 
-Three rules bound the exchange: at most one query round per session; a client that receives a second query treats the session as broken (`fmx_session.c`, `client_handshake`); and the client's handshake deadline covers the whole exchange and is not reset by the extra round.
+Three rules bound the exchange: at most one query round per session; a client that receives a second query treats the session as broken (`src/session.c`, `client_handshake`); and the client's handshake deadline covers the whole exchange and is not reset by the extra round.
 
 ### 13.4 Timers
 
@@ -436,13 +435,13 @@ Three rules bound the exchange: at most one query round per session; a client th
 | `max_message_bytes` | 65536 | the largest payload this side sends or accepts |
 | `max_peers` | 256 | server only |
 
-A client mid-handshake has no heartbeat: it has a hard deadline and is waiting for exactly one thing.
-A server maintains a heartbeat for every peer, including one still handshaking, because it must distinguish "still computing" from "vanished".
-A client that keeps answering probes without ever sending a valid hello can hold a server slot indefinitely; this is the specified behavior, and no implementation may impose an additional absolute cap.
+A client in the middle of a handshake has no heartbeat: it has a hard deadline and waits for one answer.
+A server keeps a heartbeat for every peer, including one still handshaking, because it has to tell a peer that is still computing from one that has gone.
+A client that keeps answering probes without ever sending a valid hello can hold a server slot indefinitely. This is the specified behavior, and no implementation may add an absolute cap.
 
 ## 14. Heartbeat
 
-A probe is sent on silence, never on a fixed timer.
+A probe is sent after silence, never on a fixed timer.
 
 ```
   NORMAL  --- silent for heartbeat_interval ---> send exactly one PROBE
@@ -460,7 +459,7 @@ A peer with traffic flowing is never probed, and no peer is disconnected without
 Worst-case detection time is `heartbeat_interval + heartbeat_timeout`, 20 seconds with default configuration.
 An ACK is sent from inside the tick in response to a PROBE, whether or not the application inspects the resulting `FMX_EVENT_ACK`/`FMX_EVENT_PROBE` events.
 
-## 15. The Tick
+## 15. The tick
 
 One tick performs four steps, always in this order:
 
@@ -473,7 +472,7 @@ One tick performs four steps, always in this order:
 ```
 
 No tick call blocks, sleeps, or spawns a thread.
-`fmx_connection_tick` and `fmx_server_tick` take the current timestamp as a parameter; `fmx_now_ms()` is a convenience wrapper reading a monotonic clock, so a system wall-clock adjustment cannot expire a handshake or terminate a live peer, and tests can simulate a full expiry cycle without waiting for real time to pass.
+`fmx_connection_tick` and `fmx_server_tick` take the current timestamp as a parameter, and `fmx_now_ms()` is a convenience wrapper that reads a monotonic clock. A change to the system wall clock therefore cannot expire a handshake or end a live peer, and tests can run a full expiry cycle without waiting in real time.
 
 ### 15.1 Events
 
@@ -492,9 +491,9 @@ Server events carry a non-zero `peer`; client events leave `peer` at `0`.
 Sending is refused, never queued, in four cases: `FMX_ERR_NOT_READY` before the verdict, `FMX_ERR_CONGESTED` while a frame is still queued for send, `FMX_ERR_TOO_LARGE` when the payload exceeds `max_message_bytes` or exceeds what the transport can carry, and `FMX_ERR_CLOSED` once the session is over.
 `FMX_ERR_TOO_LARGE` does not close the session, and the refused frame is not retried.
 
-## 16. Writing a Transport
+## 16. Writing a transport
 
-A transport moves bytes and reports what happened, without blocking.
+A transport moves bytes and reports what happened.
 It must never block, spawn a thread, call back into the runtime, interpret a byte of what it carries, or add a header of its own.
 
 ```c
@@ -523,19 +522,19 @@ typedef struct fmx_transport_vtable {
 | `FMX_RECV_CLOSED` | the peer closed the connection cleanly |
 | `FMX_RECV_ERROR` | the underlying link broke |
 
-Returning `FMX_TRANSPORT_STREAM` from `kind` causes the runtime to insert its own incremental framing layer (`fmx_stream_decoder`); returning `FMX_TRANSPORT_MESSAGE` is a promise that `recv` always returns exactly one whole frame, never a partial one.
+Returning `FMX_TRANSPORT_STREAM` from `kind` makes the runtime insert its own incremental framing layer (`fmx_stream_decoder`). Returning `FMX_TRANSPORT_MESSAGE` promises that `recv` always returns exactly one whole frame.
 If a transport distinguishes text from binary payloads, it must use binary, since a Fomoxa frame is not valid UTF-8.
 
 `FMX_SEND_PARTIAL` is this library's own addition to the transport vocabulary described by the implementation guide: a stream transport that accepted the first `*accepted` bytes reports it this way, and the runtime finishes sending the remainder at the top of the next tick, before any other frame is sent.
 A packet transport must never return `FMX_SEND_PARTIAL`.
 
-A control frame produced while a previous frame is still queued for send is appended behind it rather than dropped or reordered ahead of it, preserving wire order; control frames are rare and small, so this queue is bounded in practice, and application-level sends are still refused outright with `FMX_ERR_CONGESTED` rather than being queued without bound.
+A control frame produced while an earlier frame is still queued for send is appended behind it, which preserves wire order. Control frames are rare and small, so this queue stays bounded in practice, and application sends are still refused outright with `FMX_ERR_CONGESTED` instead of queuing.
 
 `close_hard` is called exactly once per transport: by `fmx_connection_destroy`, or by the server when it drops a finished peer, and it is expected to free the transport's own state.
 
 Two transports are built in: `fmx_tcp_connect` / `fmx_tcp_listen` (stream) and `fmx_udp_connect` / `fmx_udp_listen` (message).
 Both are non-blocking and are implemented on plain BSD sockets or Winsock (`src/transport/socket.c`, `src/transport/tcp.c`, `src/transport/udp.c`).
-WebSocket, TLS, and QUIC transports are out of scope for this library; writing one requires no change to this library, since it is done entirely against the `fmx_transport_vtable` contract.
+WebSocket, TLS, and QUIC transports are out of scope for this library. Writing one needs no change here, because it is written entirely against the `fmx_transport_vtable` contract.
 
 ## 17. Limits
 
@@ -555,17 +554,17 @@ WebSocket, TLS, and QUIC transports are out of scope for this library; writing o
 `make test` builds and runs `tests/test_frame.c`, `tests/test_handshake.c`, `tests/test_heartbeat.c`, `tests/test_runtime.c` and `tests/test_interop.c`, totaling 60 checks (11 + 20 + 10 + 15 + 4, counted from their `FMX_RUN` calls), plus `tests/test_demo.c` (1 check) when the generated demo tree is present, plus `tests/test_cpp.cpp` (8 checks) when a C++ compiler is available.
 `make sanitize` rebuilds from clean and reruns the same suite under AddressSanitizer and UndefinedBehaviorSanitizer.
 
-- `tests/test_frame.c` - byte-for-byte frame layout, a stream fed one byte at a time, several frames arriving in one read, permanent poisoning after a framing violation, packet framing, and the size caps.
-- `tests/test_handshake.c` - all four decision branches (§13.3), both query outcomes, every malformed hello/query/verdict/reply shape, the client deadline spanning two rounds, and a server that does not time out a peer that keeps answering probes.
-- `tests/test_heartbeat.c` - a full expiry cycle exercised without waiting for real time to pass.
-- `tests/test_runtime.c` - a fake transport exercising congestion, partial writes, `FMX_RECV_NEED_CAPACITY`, `FMX_SEND_TOO_LARGE`, the per-tick frame budget, and the one-terminal-event guarantee.
-- `tests/test_interop.c` - real TCP and UDP sockets, both directions, including a handshake that requires the second round.
-- `tests/test_demo.c` - a `fomoxac`-generated codec carried over a real socket, model in and model out.
-- `tests/test_cpp.cpp` - the C++ RAII wrapper (`fomoxa::Transport`, `fomoxa::Connection`, `fomoxa::Server`, `fomoxa::Events`) exercised over the same paths.
+- `tests/test_frame.c`: byte-for-byte frame layout, a stream fed one byte at a time, several frames arriving in one read, permanent poisoning after a framing violation, packet framing, and the size caps.
+- `tests/test_handshake.c`: all four decision branches (§13.3), both query outcomes, every malformed hello/query/verdict/reply shape, the client deadline spanning two rounds, and a server that does not time out a peer that keeps answering probes.
+- `tests/test_heartbeat.c`: a full expiry cycle exercised without waiting for real time to pass.
+- `tests/test_runtime.c`: a fake transport exercising congestion, partial writes, `FMX_RECV_NEED_CAPACITY`, `FMX_SEND_TOO_LARGE`, the per-tick frame budget, and the one-terminal-event guarantee.
+- `tests/test_interop.c`: real TCP and UDP sockets, both directions, including a handshake that requires the second round.
+- `tests/test_demo.c`: a `fomoxac`-generated codec carried over a real socket, model in and model out.
+- `tests/test_cpp.cpp`: the C++ RAII wrapper (`fomoxa::Transport`, `fomoxa::Connection`, `fomoxa::Server`, `fomoxa::Events`) exercised over the same paths.
 
 Two of the handshake test cases correspond directly to RFC-0003 §8.6: a peer that appended a field at the end of a message, and a peer that dropped one from the end, both connect successfully.
-Vectors V-001 and V-002 require that such peers not be rejected, and this is verified at the handshake layer here.
-RFC-0003's own conformance vectors exercise a codec; since the codec is `fomoxac`'s, that suite is run there, against the generated code that actually ships to consumers, and is not duplicated in this repository.
+Vectors V-001 and V-002 require that such peers are not rejected, and this repository checks that at the handshake layer.
+RFC-0003's own conformance vectors exercise a codec. The codec belongs to `fomoxac`, so that suite runs there, against the generated code that ships to consumers, and is not repeated here.
 
 ### 18.1 CI
 
@@ -578,19 +577,19 @@ RFC-0003's own conformance vectors exercise a codec; since the codec is `fomoxac
 | `windows` | windows-latest, MSYS2 UCRT64/mingw-w64-gcc | `make test`, then `scripts/package-test.sh` |
 | `package` | matrix of ubuntu-latest/macos-latest | `scripts/package-test.sh` |
 
-The Windows job additionally runs the package test because it is, per the workflow's own comment, the only place the exported `ws2_32` link requirement is checked.
-The `package` job configures and builds the library with CMake, installs it to a throwaway prefix, then configures `tests/package/` against that installed prefix only (never against the source tree) and runs the resulting binaries, so it fails on a header that was never installed, a broken exported target, or a missing link requirement.
+The Windows job also runs the package test because, as the workflow's comment says, it is the only place the exported `ws2_32` link requirement is checked.
+The `package` job builds the library with CMake, installs it to a throwaway prefix, configures `tests/package/` against that installed prefix only, never against the source tree, and runs the resulting binaries. It fails on a header that was never installed, a broken exported target, or a missing link requirement.
 
-## 19. Non-Goals
+## 19. Non-goals
 
 This library performs no reordering, no retransmission, no deduplication, no encryption, no compression, and no checksumming of its own.
 Over TCP, ordering and integrity are inherited from the transport; over UDP, packets may be lost, reordered, or duplicated, and are handed to the application exactly as received.
-Heartbeat and dead-peer detection behave identically on both transport kinds, because they are driven by elapsed time rather than by sequence numbers.
+Heartbeat and dead-peer detection behave the same on both transport kinds, because elapsed time drives them and sequence numbers play no part.
 
 Reconnection is left to the application.
 A transport that reconnected on its own would leave the two ends of a session disagreeing about whether that session is still alive.
 
-WebSocket support is out of scope for this library, with no transport, no placeholder, and no reserved extension point for one.
+WebSocket support is out of scope for this library: it has no WebSocket transport, placeholder, or reserved extension point.
 
 ## 20. Layout
 
@@ -611,7 +610,7 @@ examples/demo/                one annotated model, and the tree fomoxac wrote fr
 ```
 
 `src/session.c` has no dependency on sockets: frames go in, frames and events come out, and every timestamp is passed in from outside.
-This is what makes the expiry behavior in §13 and §14 testable without real time, and it is also why the transport implementations in `src/transport/` are as small as they are.
+That makes the expiry behavior in §13 and §14 testable without real time, and it keeps the transport implementations in `src/transport/` small.
 
 ## 21. License
 

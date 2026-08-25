@@ -78,6 +78,76 @@ static void a_message_makes_the_round_trip(void) {
     FMX_CHECK(echoed_len == 4);
 }
 
+static void shrinking_after_a_burst_still_completes_the_round_trip(void) {
+    Pair pair;
+    bool client_ready = false;
+    bool server_saw_big = false;
+    bool client_saw_big_echo = false;
+    bool server_saw_small = false;
+    bool client_saw_small_echo = false;
+    size_t big_echoed_len = 0;
+    size_t small_echoed_len = 0;
+
+    FMX_CHECK(connect_pair(pair));
+
+    std::vector<uint8_t> big_payload(5000, 7);
+    std::vector<uint8_t> small_payload = {1, 2, 3, 4, 5, 6, 7, 8};
+
+    for (int step = 0; step < 200 && !client_saw_big_echo; ++step) {
+        uint64_t now = fomoxa::now_ms();
+
+        for (fomoxa::Event event : pair.server.tick(now)) {
+            if (event.kind() == FMX_EVENT_MESSAGE) {
+                server_saw_big = true;
+                pair.server.send(event.peer(), event.message_id(), event.payload());
+            }
+        }
+
+        for (fomoxa::Event event : pair.client.tick(now)) {
+            if (event.kind() == FMX_EVENT_READY) {
+                client_ready = true;
+                FMX_CHECK(pair.client.send(1, big_payload) == FMX_OK);
+            }
+            if (event.kind() == FMX_EVENT_MESSAGE) {
+                client_saw_big_echo = true;
+                big_echoed_len = event.payload().size();
+            }
+        }
+    }
+
+    FMX_CHECK(client_ready);
+    FMX_CHECK(server_saw_big);
+    FMX_CHECK(client_saw_big_echo);
+    FMX_CHECK(big_echoed_len == big_payload.size());
+
+    pair.client.shrink_to_fit();
+    pair.server.shrink_to_fit();
+
+    FMX_CHECK(pair.client.send(2, small_payload) == FMX_OK);
+
+    for (int step = 0; step < 200 && !client_saw_small_echo; ++step) {
+        uint64_t now = fomoxa::now_ms();
+
+        for (fomoxa::Event event : pair.server.tick(now)) {
+            if (event.kind() == FMX_EVENT_MESSAGE) {
+                server_saw_small = true;
+                pair.server.send(event.peer(), event.message_id(), event.payload());
+            }
+        }
+
+        for (fomoxa::Event event : pair.client.tick(now)) {
+            if (event.kind() == FMX_EVENT_MESSAGE) {
+                client_saw_small_echo = true;
+                small_echoed_len = event.payload().size();
+            }
+        }
+    }
+
+    FMX_CHECK(server_saw_small);
+    FMX_CHECK(client_saw_small_echo);
+    FMX_CHECK(small_echoed_len == small_payload.size());
+}
+
 static void a_listener_reports_the_port_it_bound(void) {
     auto listener = fomoxa::Listener::tcp("127.0.0.1", 0);
     FMX_CHECK(listener.has_value());
@@ -164,6 +234,7 @@ static void a_byte_view_borrows_without_copying(void) {
 
 int main(void) {
     FMX_RUN(a_message_makes_the_round_trip);
+    FMX_RUN(shrinking_after_a_burst_still_completes_the_round_trip);
     FMX_RUN(a_listener_reports_the_port_it_bound);
     FMX_RUN(a_refused_connection_closes_its_transport);
     FMX_RUN(a_moved_from_handle_owns_nothing);

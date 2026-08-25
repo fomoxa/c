@@ -260,6 +260,8 @@ public:
     bool closed() const { return fmx_connection_state(raw_) == FMX_STATE_CLOSED; }
     bool congested() const { return fmx_connection_congested(raw_); }
 
+    void shrink_to_fit() { fmx_connection_shrink(raw_); }
+
     bool valid() const { return raw_ != nullptr; }
     fmx_connection *c_ptr() const { return raw_; }
 
@@ -327,6 +329,8 @@ public:
     size_t peer_count() const { return fmx_server_peer_count(raw_); }
     uint64_t peer_at(size_t index) const { return fmx_server_peer_at(raw_, index); }
     bool peer_ready(uint64_t peer) const { return fmx_server_peer_ready(raw_, peer); }
+
+    void shrink_to_fit() { fmx_server_shrink(raw_); }
 
     bool valid() const { return raw_ != nullptr; }
     fmx_server *c_ptr() const { return raw_; }

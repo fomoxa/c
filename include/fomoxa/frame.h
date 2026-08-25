@@ -78,6 +78,7 @@ fmx_frame_error fmx_stream_decoder_next(fmx_stream_decoder *decoder, fmx_frame *
 void fmx_stream_decoder_advance(fmx_stream_decoder *decoder, size_t frame_len);
 size_t fmx_stream_decoder_buffered(const fmx_stream_decoder *decoder);
 bool fmx_stream_decoder_poisoned(const fmx_stream_decoder *decoder);
+void fmx_stream_decoder_shrink(fmx_stream_decoder *decoder);
 
 #ifdef __cplusplus
 }

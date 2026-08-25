@@ -87,3 +87,8 @@ bool fmx_connection_ready(const fmx_connection *connection) {
 bool fmx_connection_congested(const fmx_connection *connection) {
     return fmx_core_congested(&connection->core);
 }
+
+void fmx_connection_shrink(fmx_connection *connection) {
+    fmx_sink_shrink(&connection->sink);
+    fmx_core_shrink(&connection->core);
+}

@@ -31,6 +31,7 @@ void fmx_connection_close(fmx_connection *connection);
 fmx_state fmx_connection_state(const fmx_connection *connection);
 bool fmx_connection_ready(const fmx_connection *connection);
 bool fmx_connection_congested(const fmx_connection *connection);
+void fmx_connection_shrink(fmx_connection *connection);
 
 #ifdef __cplusplus
 }

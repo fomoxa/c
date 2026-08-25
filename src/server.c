@@ -187,3 +187,11 @@ bool fmx_server_peer_ready(const fmx_server *server, uint64_t peer) {
     fmx_peer *found = find_peer((fmx_server *)server, peer);
     return found != NULL && fmx_session_ready(found->core.session);
 }
+
+void fmx_server_shrink(fmx_server *server) {
+    size_t index;
+    fmx_sink_shrink(&server->sink);
+    for (index = 0; index < server->peer_count; ++index) {
+        fmx_core_shrink(&server->peers[index].core);
+    }
+}

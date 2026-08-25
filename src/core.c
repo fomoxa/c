@@ -92,10 +92,26 @@ void fmx_sink_resolve(fmx_sink *sink) {
     }
 }
 
+void fmx_sink_shrink(fmx_sink *sink) {
+    if (sink->arena_len == 0 && sink->arena_cap > 0) {
+        free(sink->arena);
+        sink->arena = NULL;
+        sink->arena_cap = 0;
+    }
+    if (sink->event_count == 0 && sink->event_cap > 0) {
+        free(sink->events);
+        free(sink->offsets);
+        sink->events = NULL;
+        sink->offsets = NULL;
+        sink->event_cap = 0;
+    }
+}
+
 /* One data frame plus the handful of control frames the protocol can owe at
    any moment: one probe per silence window, one ack per probe, and at most one
    query round per session. */
 #define FMX_MAX_OUTBOX_BYTES ((size_t)(64u * 1024u))
+#define FMX_CORE_RECV_BASE_CAP ((size_t)4096)
 
 static void core_kill(fmx_core *core, fmx_disconnect reason) {
     if (!core->dead) {
@@ -367,7 +383,7 @@ fmx_result fmx_core_init(fmx_core *core, fmx_transport transport, const fmx_sche
     core->scratch_cap = handshake_frame > data_frame ? handshake_frame : data_frame;
     core->scratch = (uint8_t *)malloc(core->scratch_cap);
 
-    core->recv_cap = 4096;
+    core->recv_cap = FMX_CORE_RECV_BASE_CAP;
     core->recv = (uint8_t *)malloc(core->recv_cap);
 
     if (core->scratch == NULL || core->recv == NULL) {
@@ -469,4 +485,24 @@ bool fmx_core_finished(const fmx_core *core) {
 
 bool fmx_core_congested(const fmx_core *core) {
     return core->outbox_len > core->outbox_off;
+}
+
+void fmx_core_shrink(fmx_core *core) {
+    if (core->recv_cap > FMX_CORE_RECV_BASE_CAP) {
+        uint8_t *shrunk = (uint8_t *)realloc(core->recv, FMX_CORE_RECV_BASE_CAP);
+        if (shrunk != NULL) {
+            core->recv = shrunk;
+            core->recv_cap = FMX_CORE_RECV_BASE_CAP;
+        }
+    }
+    if (core->stream) {
+        fmx_stream_decoder_shrink(&core->decoder);
+    }
+    if (core->outbox_off >= core->outbox_len && core->outbox_cap > 0) {
+        free(core->outbox);
+        core->outbox = NULL;
+        core->outbox_cap = 0;
+        core->outbox_len = 0;
+        core->outbox_off = 0;
+    }
 }

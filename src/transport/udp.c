@@ -40,7 +40,6 @@ typedef struct fmx_udp_hub {
 
 typedef struct fmx_udp {
     fmx_fd fd;
-    uint8_t *scratch;
     uint8_t *inbox;
     size_t inbox_len;
     bool holding;
@@ -122,7 +121,7 @@ static fmx_recv_result udp_recv(fmx_transport *transport, uint8_t *buffer, size_
         if (udp->closed) {
             return FMX_RECV_CLOSED;
         }
-        count = fmx_socket_recv(udp->fd, udp->scratch, FMX_UDP_SCRATCH);
+        count = fmx_socket_recv(udp->fd, udp->inbox, FMX_UDP_SCRATCH);
         if (count < 0) {
             int error = fmx_socket_last_error();
             if (fmx_socket_would_block(error)) {
@@ -131,7 +130,6 @@ static fmx_recv_result udp_recv(fmx_transport *transport, uint8_t *buffer, size_
             udp->closed = true;
             return FMX_RECV_ERROR;
         }
-        memcpy(udp->inbox, udp->scratch, (size_t)count);
         udp->inbox_len = (size_t)count;
         udp->holding = true;
     }
@@ -158,7 +156,6 @@ static void udp_close_hard(fmx_transport *transport) {
         return;
     }
     fmx_socket_close(udp->fd);
-    free(udp->scratch);
     free(udp->inbox);
     free(udp);
     transport->state = NULL;
@@ -195,11 +192,8 @@ fmx_result fmx_udp_connect(const char *host, uint16_t port, fmx_transport *out) 
             return FMX_ERR_NO_MEMORY;
         }
         udp->fd = fd;
-        udp->scratch = (uint8_t *)malloc(FMX_UDP_SCRATCH);
         udp->inbox = (uint8_t *)malloc(FMX_UDP_SCRATCH);
-        if (udp->scratch == NULL || udp->inbox == NULL) {
-            free(udp->scratch);
-            free(udp->inbox);
+        if (udp->inbox == NULL) {
             free(udp);
             fmx_socket_close(fd);
             freeaddrinfo(candidates);

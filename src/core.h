@@ -28,6 +28,7 @@ void fmx_sink_clear(fmx_sink *sink);
 void fmx_sink_push(fmx_sink *sink, uint64_t peer, fmx_event_kind kind, uint32_t message_id,
                    const uint8_t *payload, size_t payload_len, int reason);
 void fmx_sink_resolve(fmx_sink *sink);
+void fmx_sink_shrink(fmx_sink *sink);
 
 typedef struct fmx_core {
     fmx_transport transport;
@@ -56,5 +57,6 @@ fmx_result fmx_core_send(fmx_core *core, uint32_t message_id, const uint8_t *pay
 void fmx_core_close(fmx_core *core);
 bool fmx_core_finished(const fmx_core *core);
 bool fmx_core_congested(const fmx_core *core);
+void fmx_core_shrink(fmx_core *core);
 
 #endif /* FOMOXA_INTERNAL_CORE_H */

@@ -326,6 +326,80 @@ static void a_packet_that_does_not_fit_is_not_lost(void) {
     fmx_connection_destroy(connection);
 }
 
+static void shrinking_after_a_stream_burst_still_delivers_the_next_message(void) {
+    fmx_config config;
+    fmx_connection *connection;
+    uint8_t big_payload[5000];
+    uint8_t big_frame[5100];
+    const uint8_t small_payload[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t small_frame[64];
+    size_t len;
+    const fmx_event *events;
+    size_t count;
+
+    fmx_config_defaults(&config);
+    config.max_message_bytes = 8192;
+    connection = ready_connection(FMX_TRANSPORT_STREAM, &config);
+
+    memset(big_payload, 7, sizeof(big_payload));
+    len = data_frame(1, big_payload, sizeof(big_payload), big_frame, sizeof(big_frame));
+    fake_deliver(big_frame, len);
+    count = fmx_connection_tick(connection, 1000);
+    events = fmx_connection_events(connection, &count);
+    FMX_CHECK(count == 1);
+    FMX_CHECK(events[0].payload_len == sizeof(big_payload));
+
+    fmx_connection_shrink(connection);
+
+    len = data_frame(2, small_payload, sizeof(small_payload), small_frame, sizeof(small_frame));
+    fake_deliver(small_frame, len);
+    count = fmx_connection_tick(connection, 1001);
+    events = fmx_connection_events(connection, &count);
+    FMX_CHECK(count == 1);
+    FMX_CHECK(events[0].message_id == 2);
+    FMX_CHECK(events[0].payload_len == sizeof(small_payload));
+    FMX_CHECK(memcmp(events[0].payload, small_payload, sizeof(small_payload)) == 0);
+
+    fmx_connection_destroy(connection);
+}
+
+static void shrinking_after_a_packet_burst_still_delivers_the_next_message(void) {
+    fmx_config config;
+    fmx_connection *connection;
+    uint8_t big_payload[5000];
+    uint8_t big_frame[5100];
+    const uint8_t small_payload[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t small_frame[64];
+    size_t len;
+    const fmx_event *events;
+    size_t count;
+
+    fmx_config_defaults(&config);
+    config.max_message_bytes = 8192;
+    connection = ready_connection(FMX_TRANSPORT_MESSAGE, &config);
+
+    memset(big_payload, 7, sizeof(big_payload));
+    len = data_frame(1, big_payload, sizeof(big_payload), big_frame, sizeof(big_frame));
+    fake_deliver(big_frame, len);
+    count = fmx_connection_tick(connection, 1000);
+    events = fmx_connection_events(connection, &count);
+    FMX_CHECK(count == 1);
+    FMX_CHECK(events[0].payload_len == sizeof(big_payload));
+
+    fmx_connection_shrink(connection);
+
+    len = data_frame(2, small_payload, sizeof(small_payload), small_frame, sizeof(small_frame));
+    fake_deliver(small_frame, len);
+    count = fmx_connection_tick(connection, 1001);
+    events = fmx_connection_events(connection, &count);
+    FMX_CHECK(count == 1);
+    FMX_CHECK(events[0].message_id == 2);
+    FMX_CHECK(events[0].payload_len == sizeof(small_payload));
+    FMX_CHECK(memcmp(events[0].payload, small_payload, sizeof(small_payload)) == 0);
+
+    fmx_connection_destroy(connection);
+}
+
 static void a_flood_of_frames_stops_at_the_budget(void) {
     fmx_config config;
     fmx_connection *connection;
@@ -509,6 +583,8 @@ int main(void) {
     FMX_RUN(a_partial_write_is_finished_before_anything_else);
     FMX_RUN(a_frame_over_the_transport_cap_does_not_kill_the_session);
     FMX_RUN(a_packet_that_does_not_fit_is_not_lost);
+    FMX_RUN(shrinking_after_a_stream_burst_still_delivers_the_next_message);
+    FMX_RUN(shrinking_after_a_packet_burst_still_delivers_the_next_message);
     FMX_RUN(a_flood_of_frames_stops_at_the_budget);
     FMX_RUN(a_probe_is_answered_from_inside_the_tick);
     FMX_RUN(a_rejected_handshake_raises_one_terminal_event);

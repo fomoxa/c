@@ -33,6 +33,7 @@ void fmx_server_disconnect(fmx_server *server, uint64_t peer);
 size_t fmx_server_peer_count(const fmx_server *server);
 uint64_t fmx_server_peer_at(const fmx_server *server, size_t index);
 bool fmx_server_peer_ready(const fmx_server *server, uint64_t peer);
+void fmx_server_shrink(fmx_server *server);
 
 #ifdef __cplusplus
 }
