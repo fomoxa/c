@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-#define FMX_MAX_DATAGRAM ((size_t)65507)
+#define FMX_MAX_DATAGRAM ((size_t)65499)
 
 fmx_result fmx_udp_connect(const char *host, uint16_t port, fmx_transport *out);
 fmx_result fmx_udp_listen(const char *host, uint16_t port, fmx_listener *out);

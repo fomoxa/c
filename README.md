@@ -62,7 +62,7 @@ add_executable(my-app main.c)
 target_link_libraries(my-app PRIVATE fomoxa::fomoxa)
 ```
 
-`fomoxa::fomoxa` carries its include directory and, on Windows, the `ws2_32` link requirement, so nothing further needs to be added to the consuming target.
+`fomoxa::fomoxa` carries its include directory and, on Windows, the `ws2_32` and `advapi32` link requirements, so nothing further needs to be added to the consuming target.
 This is the pattern used by the sibling interop-testing projects at `interop/c-peer` and `interop/cpp-peer`.
 
 ### 4.2 find_package, after install
@@ -100,7 +100,7 @@ The plain `make install` target (see §6) installs the library and headers under
 ## 5. Build system
 
 `Makefile`, at the repository root, is the canonical build.
-`CMakeLists.txt` has one purpose, stated in its own comment: to let a consuming project `find_package(fomoxa)` or `FetchContent` it and link `fomoxa::fomoxa`, without copying headers by hand or knowing that Windows requires `ws2_32`.
+`CMakeLists.txt` has one purpose, stated in its own comment: to let a consuming project `find_package(fomoxa)` or `FetchContent` it and link `fomoxa::fomoxa`, without copying headers by hand or knowing that Windows requires `ws2_32` and `advapi32`.
 CMake builds no tests. `tests/package/` is a separate consumer project that CI configures against an installed result, never against the source tree.
 
 Both build files read the source list from `sources.txt`, one path per line, so they cannot drift apart:
@@ -545,7 +545,7 @@ WebSocket, TLS, and QUIC transports are out of scope for this library. Writing o
 | messages declared in a hello | 1,000,000 | checked before any multiplication, so a hostile declared count cannot overflow (`FMX_MAX_SCHEMA_MESSAGES`) |
 | query rounds per session | 1 | |
 | frames processed per tick | `max_frames_per_tick`, 64 by default | tick fairness |
-| UDP datagram | 65,507 B | above this, `send` reports `FMX_SEND_TOO_LARGE` (`FMX_MAX_DATAGRAM`) |
+| UDP frame | 65,499 B | 65,507 minus the 8-byte session identifier at the start of each datagram; above this, `send` reports `FMX_SEND_TOO_LARGE` (`FMX_MAX_DATAGRAM`) |
 | UDP peers tracked by one listener | 256 | per-address queues in the UDP hub (`src/transport/udp.c`) |
 | datagrams queued per UDP peer | 64 | oldest dropped first |
 

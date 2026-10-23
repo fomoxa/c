@@ -34,7 +34,7 @@ target_include_directories(fomoxa
 # The one piece of build knowledge a consumer cannot guess. PUBLIC so it
 # travels with the imported target.
 if(WIN32)
-    target_link_libraries(fomoxa PUBLIC ws2_32)
+    target_link_libraries(fomoxa PUBLIC ws2_32 advapi32)
 endif()
 
 include(GNUInstallDirs)

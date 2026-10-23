@@ -7,7 +7,7 @@ CPPFLAGS = -std=c99 -Iinclude -Isrc
 
 LDLIBS  ?=
 ifeq ($(OS),Windows_NT)
-LDLIBS += -lws2_32
+LDLIBS += -lws2_32 -ladvapi32
 endif
 
 BUILD    = build
@@ -21,7 +21,7 @@ SRCS     = $(shell cat sources.txt)
 OBJS     = $(SRCS:%.c=$(BUILD)/%.o)
 
 TEST_SRCS = tests/test_frame.c tests/test_handshake.c tests/test_heartbeat.c \
-            tests/test_runtime.c tests/test_interop.c
+            tests/test_runtime.c tests/test_interop.c tests/test_udp.c
 TEST_BINS = $(TEST_SRCS:%.c=$(BUILD)/%)
 TEST_CPPFLAGS = $(CPPFLAGS) -Itests
 

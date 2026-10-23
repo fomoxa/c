@@ -7,6 +7,11 @@
 #include <string.h>
 
 
+#if defined(_WIN32)
+unsigned char __stdcall SystemFunction036(void *buffer, unsigned long length);
+#endif
+
+#define FMX_UDP_HEADER ((size_t)8)
 #define FMX_UDP_SCRATCH ((size_t)65535)
 #define FMX_UDP_MAX_PEERS ((size_t)256)
 #define FMX_UDP_MAX_QUEUED ((size_t)64)
@@ -20,6 +25,7 @@ typedef struct fmx_datagram {
 
 typedef struct fmx_udp_slot {
     bool used;
+    uint64_t session;
     struct sockaddr_storage addr;
     socklen_t addr_len;
     fmx_datagram *head;
@@ -32,6 +38,7 @@ typedef struct fmx_udp_hub {
     int refs;
     bool closed;
     uint8_t *scratch;
+    uint8_t *out;
     fmx_udp_slot slots[FMX_UDP_MAX_PEERS];
     size_t arrivals[FMX_UDP_MAX_PEERS];
     size_t arrival_head;
@@ -41,7 +48,9 @@ typedef struct fmx_udp_hub {
 typedef struct fmx_udp {
     fmx_fd fd;
     uint8_t *inbox;
+    uint8_t *out;
     size_t inbox_len;
+    uint64_t session;
     bool holding;
     bool closed;
 } fmx_udp;
@@ -51,6 +60,37 @@ typedef struct fmx_udp_peer {
     size_t slot;
     bool closed;
 } fmx_udp_peer;
+
+static void put_session(uint8_t *destination, uint64_t session) {
+    size_t index;
+    for (index = 0; index < FMX_UDP_HEADER; ++index) {
+        destination[index] = (uint8_t)(session >> (8 * index));
+    }
+}
+
+static uint64_t get_session(const uint8_t *source) {
+    uint64_t session = 0;
+    size_t index;
+    for (index = 0; index < FMX_UDP_HEADER; ++index) {
+        session |= (uint64_t)source[index] << (8 * index);
+    }
+    return session;
+}
+
+static bool random_bytes(uint8_t *destination, size_t length) {
+#if defined(_WIN32)
+    return SystemFunction036(destination, (unsigned long)length) != 0;
+#else
+    FILE *source = fopen("/dev/urandom", "rb");
+    bool filled;
+    if (source == NULL) {
+        return false;
+    }
+    filled = fread(destination, 1, length, source) == length;
+    (void)fclose(source);
+    return filled;
+#endif
+}
 
 static struct addrinfo *resolve(const char *host, uint16_t port, bool passive) {
     struct addrinfo hints;
@@ -90,7 +130,11 @@ static fmx_send_result udp_send(fmx_transport *transport, const uint8_t *bytes, 
         return FMX_SEND_TOO_LARGE;
     }
 
-    written = fmx_socket_send(udp->fd, bytes, len);
+    put_session(udp->out, udp->session);
+    if (len > 0) {
+        memcpy(udp->out + FMX_UDP_HEADER, bytes, len);
+    }
+    written = fmx_socket_send(udp->fd, udp->out, FMX_UDP_HEADER + len);
     if (written < 0) {
         int error = fmx_socket_last_error();
         if (fmx_socket_would_block(error)) {
@@ -102,7 +146,7 @@ static fmx_send_result udp_send(fmx_transport *transport, const uint8_t *bytes, 
         udp->closed = true;
         return FMX_SEND_ERROR;
     }
-    if ((size_t)written != len) {
+    if ((size_t)written != FMX_UDP_HEADER + len) {
         return FMX_SEND_TOO_LARGE;
     }
     *accepted = len;
@@ -116,8 +160,9 @@ static fmx_recv_result udp_recv(fmx_transport *transport, uint8_t *buffer, size_
     *received = 0;
     *needed = 0;
 
-    if (!udp->holding) {
+    while (!udp->holding) {
         ptrdiff_t count;
+        uint64_t heard;
         if (udp->closed) {
             return FMX_RECV_CLOSED;
         }
@@ -130,7 +175,15 @@ static fmx_recv_result udp_recv(fmx_transport *transport, uint8_t *buffer, size_
             udp->closed = true;
             return FMX_RECV_ERROR;
         }
-        udp->inbox_len = (size_t)count;
+        if ((size_t)count <= FMX_UDP_HEADER) {
+            continue;
+        }
+        heard = get_session(udp->inbox);
+        if (heard == 0 || (udp->session != 0 && heard != udp->session)) {
+            continue;
+        }
+        udp->session = heard;
+        udp->inbox_len = (size_t)count - FMX_UDP_HEADER;
         udp->holding = true;
     }
 
@@ -139,7 +192,7 @@ static fmx_recv_result udp_recv(fmx_transport *transport, uint8_t *buffer, size_
         return FMX_RECV_NEED_CAPACITY;
     }
     if (udp->inbox_len > 0) {
-        memcpy(buffer, udp->inbox, udp->inbox_len);
+        memcpy(buffer, udp->inbox + FMX_UDP_HEADER, udp->inbox_len);
     }
     *received = udp->inbox_len;
     udp->holding = false;
@@ -157,6 +210,7 @@ static void udp_close_hard(fmx_transport *transport) {
     }
     fmx_socket_close(udp->fd);
     free(udp->inbox);
+    free(udp->out);
     free(udp);
     transport->state = NULL;
 }
@@ -193,7 +247,10 @@ fmx_result fmx_udp_connect(const char *host, uint16_t port, fmx_transport *out) 
         }
         udp->fd = fd;
         udp->inbox = (uint8_t *)malloc(FMX_UDP_SCRATCH);
-        if (udp->inbox == NULL) {
+        udp->out = (uint8_t *)malloc(FMX_UDP_SCRATCH);
+        if (udp->inbox == NULL || udp->out == NULL) {
+            free(udp->inbox);
+            free(udp->out);
             free(udp);
             fmx_socket_close(fd);
             freeaddrinfo(candidates);
@@ -256,6 +313,7 @@ static void hub_release(fmx_udp_hub *hub) {
     }
     fmx_socket_close(hub->fd);
     free(hub->scratch);
+    free(hub->out);
     free(hub);
 }
 
@@ -292,6 +350,43 @@ static void slot_enqueue(fmx_udp_slot *slot, const uint8_t *bytes, size_t len) {
     slot->queued += 1;
 }
 
+static bool session_taken(const fmx_udp_hub *hub, uint64_t session) {
+    size_t index;
+    for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
+        if (hub->slots[index].used && hub->slots[index].session == session) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool new_session(const fmx_udp_hub *hub, uint64_t *session) {
+    uint8_t bytes[8];
+    size_t attempt;
+    for (attempt = 0; attempt < 16; ++attempt) {
+        if (!random_bytes(bytes, sizeof(bytes))) {
+            return false;
+        }
+        *session = get_session(bytes);
+        if (*session != 0 && !session_taken(hub, *session)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static size_t find_by_address(const fmx_udp_hub *hub, const struct sockaddr_storage *from,
+                              socklen_t from_len) {
+    size_t index;
+    for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
+        if (hub->slots[index].used &&
+            same_address(&hub->slots[index].addr, hub->slots[index].addr_len, from, from_len)) {
+            return index;
+        }
+    }
+    return FMX_UDP_MAX_PEERS;
+}
+
 static void hub_pump(fmx_udp_hub *hub) {
     size_t round;
 
@@ -304,6 +399,7 @@ static void hub_pump(fmx_udp_hub *hub) {
         ptrdiff_t count;
         size_t index;
         size_t chosen = FMX_UDP_MAX_PEERS;
+        uint64_t session;
 
         memset(&from, 0, sizeof(from));
         count = fmx_socket_recvfrom(hub->fd, hub->scratch, FMX_UDP_SCRATCH,
@@ -311,19 +407,14 @@ static void hub_pump(fmx_udp_hub *hub) {
         if (count < 0) {
             return;
         }
-
-        for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
-            if (hub->slots[index].used &&
-                same_address(&hub->slots[index].addr, hub->slots[index].addr_len, &from,
-                             from_len)) {
-                chosen = index;
-                break;
-            }
+        if ((size_t)count <= FMX_UDP_HEADER) {
+            continue;
         }
 
-        if (chosen == FMX_UDP_MAX_PEERS) {
+        session = get_session(hub->scratch);
+        if (session != 0) {
             for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
-                if (!hub->slots[index].used) {
+                if (hub->slots[index].used && hub->slots[index].session == session) {
                     chosen = index;
                     break;
                 }
@@ -331,20 +422,44 @@ static void hub_pump(fmx_udp_hub *hub) {
             if (chosen == FMX_UDP_MAX_PEERS) {
                 continue;
             }
-            hub->slots[chosen].used = true;
-            hub->slots[chosen].addr = from;
-            hub->slots[chosen].addr_len = from_len;
-            hub->slots[chosen].head = NULL;
-            hub->slots[chosen].tail = NULL;
-            hub->slots[chosen].queued = 0;
-            if (hub->arrival_count < FMX_UDP_MAX_PEERS) {
-                size_t at = (hub->arrival_head + hub->arrival_count) % FMX_UDP_MAX_PEERS;
-                hub->arrivals[at] = chosen;
-                hub->arrival_count += 1;
+            if (!same_address(&hub->slots[chosen].addr, hub->slots[chosen].addr_len, &from,
+                              from_len)) {
+                if (find_by_address(hub, &from, from_len) != FMX_UDP_MAX_PEERS) {
+                    continue;
+                }
+                hub->slots[chosen].addr = from;
+                hub->slots[chosen].addr_len = from_len;
+            }
+        } else {
+            chosen = find_by_address(hub, &from, from_len);
+            if (chosen == FMX_UDP_MAX_PEERS) {
+                uint64_t created;
+                for (index = 0; index < FMX_UDP_MAX_PEERS; ++index) {
+                    if (!hub->slots[index].used) {
+                        chosen = index;
+                        break;
+                    }
+                }
+                if (chosen == FMX_UDP_MAX_PEERS || !new_session(hub, &created)) {
+                    continue;
+                }
+                hub->slots[chosen].used = true;
+                hub->slots[chosen].session = created;
+                hub->slots[chosen].addr = from;
+                hub->slots[chosen].addr_len = from_len;
+                hub->slots[chosen].head = NULL;
+                hub->slots[chosen].tail = NULL;
+                hub->slots[chosen].queued = 0;
+                if (hub->arrival_count < FMX_UDP_MAX_PEERS) {
+                    size_t at = (hub->arrival_head + hub->arrival_count) % FMX_UDP_MAX_PEERS;
+                    hub->arrivals[at] = chosen;
+                    hub->arrival_count += 1;
+                }
             }
         }
 
-        slot_enqueue(&hub->slots[chosen], hub->scratch, (size_t)count);
+        slot_enqueue(&hub->slots[chosen], hub->scratch + FMX_UDP_HEADER,
+                     (size_t)count - FMX_UDP_HEADER);
     }
 }
 
@@ -368,7 +483,11 @@ static fmx_send_result udp_peer_send(fmx_transport *transport, const uint8_t *by
     }
 
     slot = &peer->hub->slots[peer->slot];
-    written = fmx_socket_sendto(peer->hub->fd, bytes, len,
+    put_session(peer->hub->out, slot->session);
+    if (len > 0) {
+        memcpy(peer->hub->out + FMX_UDP_HEADER, bytes, len);
+    }
+    written = fmx_socket_sendto(peer->hub->fd, peer->hub->out, FMX_UDP_HEADER + len,
                                 (const struct sockaddr *)&slot->addr, slot->addr_len);
     if (written < 0) {
         int error = fmx_socket_last_error();
@@ -380,7 +499,7 @@ static fmx_send_result udp_peer_send(fmx_transport *transport, const uint8_t *by
         }
         return FMX_SEND_ERROR;
     }
-    if ((size_t)written != len) {
+    if ((size_t)written != FMX_UDP_HEADER + len) {
         return FMX_SEND_TOO_LARGE;
     }
     *accepted = len;
@@ -505,7 +624,10 @@ fmx_result fmx_udp_listen(const char *host, uint16_t port, fmx_listener *out) {
             return FMX_ERR_NO_MEMORY;
         }
         hub->scratch = (uint8_t *)malloc(FMX_UDP_SCRATCH);
-        if (hub->scratch == NULL) {
+        hub->out = (uint8_t *)malloc(FMX_UDP_SCRATCH);
+        if (hub->scratch == NULL || hub->out == NULL) {
+            free(hub->scratch);
+            free(hub->out);
             free(hub);
             fmx_socket_close(fd);
             freeaddrinfo(candidates);
