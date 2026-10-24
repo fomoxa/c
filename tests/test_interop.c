@@ -247,11 +247,126 @@ static void a_peer_that_appends_a_field_still_connects(void) {
     fmx_server_destroy(server);
 }
 
+static void tick_clients(fmx_server *server, fmx_connection **clients, size_t client_count) {
+    size_t index;
+    uint64_t now = fmx_now_ms();
+    (void)fmx_server_tick(server, now);
+    for (index = 0; index < client_count; ++index) {
+        (void)fmx_connection_tick(clients[index], now);
+    }
+}
+
+static int receive_one(fmx_server *server, fmx_connection *client) {
+    int round;
+    int received = -1;
+    size_t messages = 0;
+
+    for (round = 0; round < 300 && messages == 0; ++round) {
+        const fmx_event *events;
+        size_t count;
+        size_t index;
+        uint64_t now = fmx_now_ms();
+
+        (void)fmx_server_tick(server, now);
+        (void)fmx_connection_tick(client, now);
+        events = fmx_connection_events(client, &count);
+        for (index = 0; index < count; ++index) {
+            if (events[index].kind == FMX_EVENT_MESSAGE && events[index].payload_len == 1) {
+                received = events[index].payload[0];
+                messages += 1;
+            }
+        }
+        nap();
+    }
+    FMX_CHECK(messages == 1);
+    return received;
+}
+
+static void a_send_by_id_reaches_the_right_peer_after_a_peer_in_the_middle_leaves(void) {
+    fmx_listener listener;
+    fmx_transport transport;
+    fmx_server *server;
+    fmx_connection *clients[3];
+    uint64_t ids[3];
+    uint64_t id_of_client[3];
+    size_t client_count = 3;
+    size_t leaving_client = 0;
+    size_t index;
+    int round;
+    uint8_t payload;
+    uint16_t port;
+
+    FMX_CHECK(fmx_tcp_listen("127.0.0.1", 0, &listener) == FMX_OK);
+    port = fmx_tcp_listener_port(&listener);
+    server = fmx_server_create(listener, &SCHEMA, NULL);
+    FMX_CHECK(server != NULL);
+    for (index = 0; index < client_count; ++index) {
+        FMX_CHECK(fmx_tcp_connect("127.0.0.1", port, &transport) == FMX_OK);
+        clients[index] = fmx_connection_create(transport, &SCHEMA, NULL, fmx_now_ms());
+        FMX_CHECK(clients[index] != NULL);
+    }
+
+    for (round = 0; round < 300; ++round) {
+        size_t ready = 0;
+        tick_clients(server, clients, client_count);
+        for (index = 0; index < fmx_server_peer_count(server); ++index) {
+            ready += fmx_server_peer_ready(server, fmx_server_peer_at(server, index)) ? 1u : 0u;
+        }
+        if (ready == 3 && fmx_connection_ready(clients[0]) && fmx_connection_ready(clients[1]) &&
+            fmx_connection_ready(clients[2])) {
+            break;
+        }
+        nap();
+    }
+    FMX_CHECK(fmx_server_peer_count(server) == 3);
+
+    for (index = 0; index < 3; ++index) {
+        ids[index] = fmx_server_peer_at(server, index);
+        payload = (uint8_t)ids[index];
+        FMX_CHECK(fmx_server_send(server, ids[index], 7, &payload, 1) == FMX_OK);
+    }
+    for (index = 0; index < client_count; ++index) {
+        id_of_client[index] = (uint64_t)receive_one(server, clients[index]);
+        if (id_of_client[index] == ids[1]) {
+            leaving_client = index;
+        }
+    }
+
+    fmx_connection_destroy(clients[leaving_client]);
+    for (index = leaving_client; index + 1 < client_count; ++index) {
+        clients[index] = clients[index + 1];
+        id_of_client[index] = id_of_client[index + 1];
+    }
+    client_count -= 1;
+
+    for (round = 0; round < 300 && fmx_server_peer_count(server) > 2; ++round) {
+        tick_clients(server, clients, client_count);
+        nap();
+    }
+    FMX_CHECK(fmx_server_peer_count(server) == 2);
+    payload = 0;
+    FMX_CHECK(fmx_server_send(server, ids[1], 7, &payload, 1) == FMX_ERR_CLOSED);
+
+    for (index = client_count; index-- > 0;) {
+        payload = (uint8_t)(0x80u | index);
+        FMX_CHECK(fmx_server_send(server, id_of_client[index], 7, &payload, 1) == FMX_OK);
+    }
+    for (index = 0; index < client_count; ++index) {
+        FMX_CHECK(receive_one(server, clients[index]) == (int)(0x80u | index));
+    }
+
+    for (index = 0; index < client_count; ++index) {
+        fmx_connection_destroy(clients[index]);
+    }
+    fmx_server_destroy(server);
+}
+
 int main(void) {
     build_schema();
     FMX_RUN(tcp_talks_both_ways);
     FMX_RUN(udp_talks_both_ways);
     FMX_RUN(a_schema_conflict_is_refused_over_a_real_socket);
     FMX_RUN(a_peer_that_appends_a_field_still_connects);
+    FMX_RUN(a_send_by_id_reaches_the_right_peer_after_a_peer_in_the_middle_leaves);
     FMX_DONE();
 }

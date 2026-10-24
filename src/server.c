@@ -10,6 +10,11 @@ typedef struct fmx_peer {
     fmx_core core;
 } fmx_peer;
 
+typedef struct fmx_peer_slot {
+    uint64_t id;
+    size_t position;
+} fmx_peer_slot;
+
 struct fmx_server {
     fmx_listener listener;
     const fmx_schema *schema;
@@ -17,14 +22,34 @@ struct fmx_server {
     fmx_peer *peers;
     size_t peer_count;
     size_t peer_cap;
+    fmx_peer_slot *slots;
+    size_t slot_mask;
     uint64_t next_id;
     fmx_sink sink;
 };
+
+static void slots_insert(fmx_server *server, uint64_t id, size_t position) {
+    size_t at = (size_t)id & server->slot_mask;
+    while (server->slots[at].id != 0) {
+        at = (at + 1) & server->slot_mask;
+    }
+    server->slots[at].id = id;
+    server->slots[at].position = position;
+}
+
+static void slots_rebuild(fmx_server *server) {
+    size_t index;
+    memset(server->slots, 0, (server->slot_mask + 1) * sizeof(fmx_peer_slot));
+    for (index = 0; index < server->peer_count; ++index) {
+        slots_insert(server, server->peers[index].id, index);
+    }
+}
 
 fmx_server *fmx_server_create(fmx_listener listener, const fmx_schema *schema,
                               const fmx_config *config) {
     fmx_server *server;
     fmx_config effective;
+    size_t slot_count = 2;
 
     if (listener.vtable == NULL || schema == NULL) {
         return NULL;
@@ -47,7 +72,17 @@ fmx_server *fmx_server_create(fmx_listener listener, const fmx_schema *schema,
         free(server);
         return NULL;
     }
+    while (slot_count < (size_t)effective.max_peers * 2) {
+        slot_count *= 2;
+    }
+    server->slots = (fmx_peer_slot *)calloc(slot_count, sizeof(fmx_peer_slot));
+    if (server->slots == NULL) {
+        free(server->peers);
+        free(server);
+        return NULL;
+    }
     if (fmx_sink_init(&server->sink, 64) != FMX_OK) {
+        free(server->slots);
         free(server->peers);
         free(server);
         return NULL;
@@ -56,6 +91,7 @@ fmx_server *fmx_server_create(fmx_listener listener, const fmx_schema *schema,
     server->schema = schema;
     server->config = effective;
     server->peer_cap = effective.max_peers;
+    server->slot_mask = slot_count - 1;
     server->next_id = 1;
     return server;
 }
@@ -73,6 +109,7 @@ void fmx_server_destroy(fmx_server *server) {
         server->listener.vtable->close(&server->listener);
     }
     fmx_sink_release(&server->sink);
+    free(server->slots);
     free(server->peers);
     free(server);
 }
@@ -97,6 +134,7 @@ static void accept_peers(fmx_server *server, uint64_t now_ms) {
             transport.vtable->close_hard(&transport);
             return;
         }
+        slots_insert(server, peer->id, server->peer_count);
         server->next_id += 1;
         server->peer_count += 1;
         room -= 1;
@@ -105,6 +143,7 @@ static void accept_peers(fmx_server *server, uint64_t now_ms) {
 
 size_t fmx_server_tick(fmx_server *server, uint64_t now_ms) {
     size_t index = 0;
+    bool removed = false;
 
     fmx_sink_clear(&server->sink);
     accept_peers(server, now_ms);
@@ -122,9 +161,13 @@ size_t fmx_server_tick(fmx_server *server, uint64_t now_ms) {
                         (server->peer_count - index - 1) * sizeof(fmx_peer));
             }
             server->peer_count -= 1;
+            removed = true;
         } else {
             index += 1;
         }
+    }
+    if (removed) {
+        slots_rebuild(server);
     }
 
     fmx_sink_resolve(&server->sink);
@@ -139,11 +182,12 @@ const fmx_event *fmx_server_events(const fmx_server *server, size_t *count) {
 }
 
 static fmx_peer *find_peer(fmx_server *server, uint64_t peer) {
-    size_t index;
-    for (index = 0; index < server->peer_count; ++index) {
-        if (server->peers[index].id == peer) {
-            return &server->peers[index];
+    size_t at = (size_t)peer & server->slot_mask;
+    while (server->slots[at].id != 0) {
+        if (server->slots[at].id == peer) {
+            return &server->peers[server->slots[at].position];
         }
+        at = (at + 1) & server->slot_mask;
     }
     return NULL;
 }

@@ -74,13 +74,13 @@ cmake --install build
 ```
 
 ```cmake
-find_package(fomoxa 0.1.1 REQUIRED)
+find_package(fomoxa 0.1.2 REQUIRED)
 add_executable(my-app main.c)
 target_link_libraries(my-app PRIVATE fomoxa::fomoxa)
 ```
 
 `CMakeLists.txt` installs the static library, the `include/fomoxa/` headers, an exported `fomoxa-targets.cmake`, and a `fomoxa-config.cmake` generated from `cmake/fomoxa-config.cmake.in`.
-The project version, used above, is `0.1.1`, declared in `CMakeLists.txt`.
+The project version, used above, is `0.1.2`, declared in `CMakeLists.txt`.
 
 ### 4.3 add_subdirectory
 
