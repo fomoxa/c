@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(fomoxa VERSION 0.1.0 LANGUAGES C)
+project(fomoxa VERSION 0.1.1 LANGUAGES C)
 
 # The Makefile beside this file is the canonical build: it compiles the
 # library, runs every test and the sanitizer pass. This file exists for one
