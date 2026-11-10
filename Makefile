@@ -21,7 +21,8 @@ SRCS     = $(shell cat sources.txt)
 OBJS     = $(SRCS:%.c=$(BUILD)/%.o)
 
 TEST_SRCS = tests/test_frame.c tests/test_handshake.c tests/test_heartbeat.c \
-            tests/test_runtime.c tests/test_interop.c tests/test_udp.c
+            tests/test_runtime.c tests/test_interop.c tests/test_udp.c \
+            tests/test_handshake_part.c
 TEST_BINS = $(TEST_SRCS:%.c=$(BUILD)/%)
 TEST_CPPFLAGS = $(CPPFLAGS) -Itests
 

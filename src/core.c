@@ -120,10 +120,127 @@ static void core_kill(fmx_core *core, fmx_disconnect reason) {
     }
 }
 
+typedef enum hold_kind { HOLD_MESSAGE, HOLD_CONTROL, HOLD_PART } hold_kind;
+
+static void packet_pop(fmx_core *core) {
+    fmx_packet *head = &core->packets[core->packets_head];
+    if (head->counted) {
+        core->packet_bytes -= head->len;
+    }
+    free(head->bytes);
+    head->bytes = NULL;
+    core->packets_head = (core->packets_head + 1) % core->packets_cap;
+    core->packets_len -= 1;
+}
+
+static void packets_clear(fmx_core *core) {
+    while (core->packets_len > 0) {
+        packet_pop(core);
+    }
+    core->packets_head = 0;
+}
+
+static bool packets_grow(fmx_core *core) {
+    size_t grown = core->packets_cap == 0 ? 16 : core->packets_cap * 2;
+    fmx_packet *packets = (fmx_packet *)malloc(grown * sizeof(fmx_packet));
+    size_t index;
+    if (packets == NULL) {
+        return false;
+    }
+    for (index = 0; index < core->packets_len; ++index) {
+        packets[index] = core->packets[(core->packets_head + index) % core->packets_cap];
+    }
+    free(core->packets);
+    core->packets = packets;
+    core->packets_cap = grown;
+    core->packets_head = 0;
+    return true;
+}
+
+static fmx_result packet_hold(fmx_core *core, const uint8_t *bytes, size_t len, hold_kind hold) {
+    fmx_packet *slot;
+    uint8_t *copy;
+
+    if (hold == HOLD_CONTROL && core->packet_bytes + len > FMX_MAX_OUTBOX_BYTES) {
+        core_kill(core, FMX_DISCONNECT_UNRESPONSIVE);
+        return FMX_ERR_CLOSED;
+    }
+    if (core->packets_len == core->packets_cap && !packets_grow(core)) {
+        core_kill(core, FMX_DISCONNECT_TRANSPORT_ERROR);
+        return FMX_ERR_NO_MEMORY;
+    }
+    copy = (uint8_t *)malloc(len);
+    if (copy == NULL) {
+        core_kill(core, FMX_DISCONNECT_TRANSPORT_ERROR);
+        return FMX_ERR_NO_MEMORY;
+    }
+    memcpy(copy, bytes, len);
+    slot = &core->packets[(core->packets_head + core->packets_len) % core->packets_cap];
+    slot->bytes = copy;
+    slot->len = len;
+    slot->counted = hold != HOLD_PART;
+    if (slot->counted) {
+        core->packet_bytes += len;
+    }
+    core->packets_len += 1;
+    return FMX_OK;
+}
+
+static fmx_result send_packet(fmx_core *core, const uint8_t *bytes, size_t len, hold_kind hold) {
+    size_t accepted = 0;
+    fmx_send_result result;
+
+    if (core->packets_len > 0) {
+        return packet_hold(core, bytes, len, hold);
+    }
+    result = core->transport.vtable->send(&core->transport, bytes, len, &accepted);
+    switch (result) {
+    case FMX_SEND_SENT:
+        return FMX_OK;
+    case FMX_SEND_WOULD_BLOCK:
+        return packet_hold(core, bytes, len, hold);
+    case FMX_SEND_TOO_LARGE:
+        return FMX_ERR_TOO_LARGE;
+    case FMX_SEND_CLOSED:
+        core_kill(core, FMX_DISCONNECT_PEER_CLOSED);
+        return FMX_ERR_CLOSED;
+    case FMX_SEND_PARTIAL:
+    case FMX_SEND_ERROR:
+        core_kill(core, FMX_DISCONNECT_TRANSPORT_ERROR);
+        return FMX_ERR_CLOSED;
+    }
+    return FMX_ERR_CLOSED;
+}
+
+static void flush_packets(fmx_core *core) {
+    while (core->packets_len > 0) {
+        fmx_packet *head = &core->packets[core->packets_head];
+        size_t accepted = 0;
+        fmx_send_result result =
+            core->transport.vtable->send(&core->transport, head->bytes, head->len, &accepted);
+        switch (result) {
+        case FMX_SEND_SENT:
+        case FMX_SEND_TOO_LARGE:
+            packet_pop(core);
+            break;
+        case FMX_SEND_WOULD_BLOCK:
+            return;
+        case FMX_SEND_CLOSED:
+            core_kill(core, FMX_DISCONNECT_PEER_CLOSED);
+            return;
+        case FMX_SEND_PARTIAL:
+        case FMX_SEND_ERROR:
+            core_kill(core, FMX_DISCONNECT_TRANSPORT_ERROR);
+            return;
+        }
+    }
+}
+
 static void core_shutdown(fmx_core *core) {
     core_kill(core, FMX_DISCONNECT_LOCAL);
     core->outbox_len = 0;
     core->outbox_off = 0;
+    packets_clear(core);
     core->transport.vtable->close_soft(&core->transport);
 }
 
@@ -189,6 +306,10 @@ static void send_control(fmx_core *core, const uint8_t *bytes, size_t len) {
     if (core->dead || len == 0) {
         return;
     }
+    if (!core->stream) {
+        (void)send_packet(core, bytes, len, HOLD_CONTROL);
+        return;
+    }
     if (core->outbox_len > core->outbox_off) {
         /* Queue behind what is already waiting, never overwrite it: a refusal
            verdict lost that way leaves the peer waiting out its deadline
@@ -208,6 +329,10 @@ static void send_control(fmx_core *core, const uint8_t *bytes, size_t len) {
 }
 
 static void core_flush(fmx_core *core) {
+    if (!core->stream) {
+        flush_packets(core);
+        return;
+    }
     while (core->outbox_len > core->outbox_off) {
         size_t accepted = 0;
         fmx_send_result result =
@@ -242,6 +367,19 @@ static void core_flush(fmx_core *core) {
     core->outbox_off = 0;
 }
 
+static void emit_parts(fmx_core *core, const uint8_t *payload, size_t len) {
+    uint8_t part[FMX_PACKET_HANDSHAKE_BUDGET];
+    size_t count = (len + FMX_PART_CONTENT_LEN - 1) / FMX_PART_CONTENT_LEN;
+    size_t index;
+
+    for (index = 0; index < count && !core->dead; ++index) {
+        size_t offset = index * FMX_PART_CONTENT_LEN;
+        size_t chunk = len - offset < FMX_PART_CONTENT_LEN ? len - offset : FMX_PART_CONTENT_LEN;
+        size_t written = fmx_part_encode(index, count, payload + offset, chunk, part);
+        (void)send_packet(core, part, written, HOLD_PART);
+    }
+}
+
 static void emit_out(fmx_core *core, const fmx_reaction *reaction) {
     size_t written = 0;
 
@@ -256,6 +394,10 @@ static void emit_out(fmx_core *core, const fmx_reaction *reaction) {
         if (fmx_frame_encode_handshake(reaction->out_payload, reaction->out_payload_len,
                                        core->scratch, core->scratch_cap,
                                        &written) != FMX_FRAME_OK) {
+            return;
+        }
+        if (!core->stream && written > FMX_PACKET_HANDSHAKE_BUDGET) {
+            emit_parts(core, reaction->out_payload, reaction->out_payload_len);
             return;
         }
         break;
@@ -291,6 +433,74 @@ static bool grow_recv(fmx_core *core, size_t needed) {
     core->recv = grown;
     core->recv_cap = needed;
     return true;
+}
+
+static const uint8_t NO_BYTES[1] = {0};
+
+static void deliver(fmx_core *core, uint8_t type, const uint8_t *payload, size_t len,
+                    uint64_t now_ms, uint64_t peer, fmx_sink *sink) {
+    fmx_frame frame;
+    fmx_reaction reaction;
+
+    frame.type = type;
+    frame.message_id = 0;
+    frame.payload = payload;
+    frame.payload_len = len;
+    fmx_session_on_frame(core->session, &frame, now_ms, &reaction);
+    apply(core, &reaction, peer, sink);
+}
+
+static void receive_part(fmx_core *core, const fmx_part *part, uint64_t now_ms, uint64_t peer,
+                         fmx_sink *sink) {
+    const uint8_t *body;
+    size_t body_len = 0;
+
+    if (fmx_session_state(core->session) != FMX_STATE_HANDSHAKING) {
+        return;
+    }
+    switch (fmx_assembler_add(&core->parts, part)) {
+    case FMX_ASSEMBLY_PENDING:
+        deliver(core, FMX_FRAME_HANDSHAKE_PART, NO_BYTES, 0, now_ms, peer, sink);
+        return;
+    case FMX_ASSEMBLY_COMPLETE:
+        body = fmx_assembler_body(&core->parts, &body_len);
+        deliver(core, FMX_FRAME_HANDSHAKE, body, body_len, now_ms, peer, sink);
+        fmx_assembler_reset(&core->parts);
+        return;
+    case FMX_ASSEMBLY_BROKEN:
+        fmx_assembler_reset(&core->parts);
+        deliver(core, FMX_FRAME_HANDSHAKE, NO_BYTES, 0, now_ms, peer, sink);
+        return;
+    case FMX_ASSEMBLY_NO_MEMORY:
+        fmx_assembler_reset(&core->parts);
+        core_kill(core, FMX_DISCONNECT_TRANSPORT_ERROR);
+        return;
+    }
+}
+
+static void receive_packet(fmx_core *core, size_t received, uint64_t now_ms, uint64_t peer,
+                           fmx_sink *sink) {
+    fmx_frame frame;
+    fmx_reaction reaction;
+    fmx_part part;
+
+    if (received > 0 && core->recv[0] == FMX_FRAME_HANDSHAKE_PART) {
+        if (fmx_part_decode(core->recv, received, &part) == FMX_FRAME_OK) {
+            receive_part(core, &part, now_ms, peer, sink);
+        }
+        return;
+    }
+    if (fmx_frame_decode_packet(core->recv, received, core->config.max_message_bytes, &frame) !=
+        FMX_FRAME_OK) {
+        return;
+    }
+    if (frame.type == FMX_FRAME_HANDSHAKE && fmx_assembler_pending(&core->parts)) {
+        fmx_assembler_reset(&core->parts);
+        deliver(core, FMX_FRAME_HANDSHAKE, NO_BYTES, 0, now_ms, peer, sink);
+        return;
+    }
+    fmx_session_on_frame(core->session, &frame, now_ms, &reaction);
+    apply(core, &reaction, peer, sink);
 }
 
 static void drain(fmx_core *core, uint64_t now_ms, uint64_t peer, fmx_sink *sink) {
@@ -332,12 +542,7 @@ static void drain(fmx_core *core, uint64_t now_ms, uint64_t peer, fmx_sink *sink
                 }
                 reads -= 1;
             } else {
-                fmx_frame frame;
-                if (fmx_frame_decode_packet(core->recv, received, core->config.max_message_bytes,
-                                            &frame) == FMX_FRAME_OK) {
-                    fmx_session_on_frame(core->session, &frame, now_ms, &reaction);
-                    apply(core, &reaction, peer, sink);
-                }
+                receive_packet(core, received, now_ms, peer, sink);
                 frames -= 1;
             }
             break;
@@ -420,6 +625,11 @@ void fmx_core_release(fmx_core *core) {
     if (core->stream) {
         fmx_stream_decoder_release(&core->decoder);
     }
+    packets_clear(core);
+    free(core->packets);
+    core->packets = NULL;
+    core->packets_cap = 0;
+    fmx_assembler_release(&core->parts);
     free(core->outbox);
     free(core->recv);
     free(core->scratch);
@@ -464,12 +674,15 @@ fmx_result fmx_core_send(fmx_core *core, uint32_t message_id, const uint8_t *pay
     if (len > (size_t)core->config.max_message_bytes) {
         return FMX_ERR_TOO_LARGE;
     }
-    if (core->outbox_len > core->outbox_off) {
+    if (fmx_core_congested(core)) {
         return FMX_ERR_CONGESTED;
     }
     if (fmx_frame_encode_data(message_id, payload, len, core->scratch, core->scratch_cap,
                               &written) != FMX_FRAME_OK) {
         return FMX_ERR_TOO_LARGE;
+    }
+    if (!core->stream) {
+        return send_packet(core, core->scratch, written, HOLD_MESSAGE);
     }
     return write_frame(core, core->scratch, written);
 }
@@ -484,7 +697,7 @@ bool fmx_core_finished(const fmx_core *core) {
 }
 
 bool fmx_core_congested(const fmx_core *core) {
-    return core->outbox_len > core->outbox_off;
+    return core->outbox_len > core->outbox_off || core->packets_len > 0;
 }
 
 void fmx_core_shrink(fmx_core *core) {
@@ -497,6 +710,13 @@ void fmx_core_shrink(fmx_core *core) {
     }
     if (core->stream) {
         fmx_stream_decoder_shrink(&core->decoder);
+    }
+    fmx_assembler_shrink(&core->parts);
+    if (core->packets_len == 0 && core->packets_cap > 0) {
+        free(core->packets);
+        core->packets = NULL;
+        core->packets_cap = 0;
+        core->packets_head = 0;
     }
     if (core->outbox_off >= core->outbox_len && core->outbox_cap > 0) {
         free(core->outbox);

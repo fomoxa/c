@@ -15,15 +15,22 @@ extern "C" {
 #define FMX_FRAME_PROBE ((uint8_t)1)
 #define FMX_FRAME_ACK ((uint8_t)2)
 #define FMX_FRAME_HANDSHAKE ((uint8_t)3)
+#define FMX_FRAME_HANDSHAKE_PART ((uint8_t)4)
 
 #define FMX_MAGIC_C ((uint8_t)0x43)
 #define FMX_MAGIC_Y ((uint8_t)0x59)
 
 #define FMX_DATA_HEADER_LEN ((size_t)11)
 #define FMX_HANDSHAKE_HEADER_LEN ((size_t)5)
+#define FMX_PART_HEADER_LEN ((size_t)9)
 
 #define FMX_MAX_MESSAGE_PAYLOAD ((size_t)(16u * 1024u * 1024u))
 #define FMX_MAX_HANDSHAKE_PAYLOAD ((size_t)(1u * 1024u * 1024u))
+
+#define FMX_PACKET_HANDSHAKE_BUDGET ((size_t)900)
+#define FMX_PART_CONTENT_LEN (FMX_PACKET_HANDSHAKE_BUDGET - FMX_PART_HEADER_LEN)
+#define FMX_MAX_HANDSHAKE_PARTS                                                                    \
+    ((FMX_MAX_HANDSHAKE_PAYLOAD + FMX_PART_CONTENT_LEN - 1) / FMX_PART_CONTENT_LEN)
 
 typedef enum fmx_frame_error {
     FMX_FRAME_OK = 0,

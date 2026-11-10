@@ -6,7 +6,7 @@ project(fomoxa-package-test LANGUAGES C)
 # tree, so it fails whenever the install layout or the exported target is
 # wrong: a missing header, a header that never got installed, or the ws2_32
 # link requirement that Windows needs and only the exported target carries.
-find_package(fomoxa 0.1.2 REQUIRED)
+find_package(fomoxa 0.1.3 REQUIRED)
 
 add_executable(consume_c main.c)
 target_link_libraries(consume_c PRIVATE fomoxa::fomoxa)

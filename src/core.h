@@ -12,6 +12,8 @@
 #include "fomoxa/session.h"
 #include "fomoxa/transport.h"
 
+#include "assembler.h"
+
 typedef struct fmx_sink {
     uint8_t *arena;
     size_t arena_cap;
@@ -30,6 +32,12 @@ void fmx_sink_push(fmx_sink *sink, uint64_t peer, fmx_event_kind kind, uint32_t 
 void fmx_sink_resolve(fmx_sink *sink);
 void fmx_sink_shrink(fmx_sink *sink);
 
+typedef struct fmx_packet {
+    uint8_t *bytes;
+    size_t len;
+    bool counted;
+} fmx_packet;
+
 typedef struct fmx_core {
     fmx_transport transport;
     fmx_session *session;
@@ -40,6 +48,12 @@ typedef struct fmx_core {
     size_t outbox_cap;
     size_t outbox_len;
     size_t outbox_off;
+    fmx_packet *packets;
+    size_t packets_cap;
+    size_t packets_head;
+    size_t packets_len;
+    size_t packet_bytes;
+    fmx_assembler parts;
     uint8_t *recv;
     size_t recv_cap;
     uint8_t *scratch;

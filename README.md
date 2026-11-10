@@ -74,13 +74,13 @@ cmake --install build
 ```
 
 ```cmake
-find_package(fomoxa 0.1.2 REQUIRED)
+find_package(fomoxa 0.1.3 REQUIRED)
 add_executable(my-app main.c)
 target_link_libraries(my-app PRIVATE fomoxa::fomoxa)
 ```
 
 `CMakeLists.txt` installs the static library, the `include/fomoxa/` headers, an exported `fomoxa-targets.cmake`, and a `fomoxa-config.cmake` generated from `cmake/fomoxa-config.cmake.in`.
-The project version, used above, is `0.1.2`, declared in `CMakeLists.txt`.
+The project version, used above, is `0.1.3`, declared in `CMakeLists.txt`.
 
 ### 4.3 add_subdirectory
 
@@ -334,6 +334,7 @@ Every byte this library places on a transport is a frame, and every frame starts
 | 1 | PROBE | one byte, no body |
 | 2 | ACK | one byte, no body |
 | 3 | HANDSHAKE | 5-byte header, then an opaque payload |
+| 4 | HANDSHAKE PART | 9-byte header, then up to 891 bytes of a handshake payload; packet transports only |
 
 ### 12.1 Data frame
 
@@ -356,13 +357,26 @@ The message id is a message type assigned by the schema, not a sequence number; 
   +----+---------------+----------------------------+
 ```
 
+On a packet transport, a handshake payload whose HANDSHAKE frame would be longer than 900 bytes (`FMX_PACKET_HANDSHAKE_BUDGET`) goes out as HANDSHAKE PART frames, one per packet (implementation guide §2.8); a hello splits from 63 messages on.
+
+```
+  +----+------------+------------+---------------+----------------------+
+  | 04 | part index | part count | part len      | part bytes           |
+  |    | 2B u16 LE  | 2B u16 LE  | 4B u32 LE     | = part len, <= 891   |
+  +----+------------+------------+---------------+----------------------+
+```
+
+Every part but the last carries exactly 891 bytes (`FMX_PART_CONTENT_LEN`). The receiver places the parts by index, in any order, and reads the assembled payload as it reads the payload of one HANDSHAKE frame. A repeated part with the same bytes is ignored. The handshake fails as malformed (the server answers `FMX_VERDICT_MALFORMED_HELLO`, the client raises `FMX_EVENT_HANDSHAKE_FAILED` with `FMX_FAIL_MALFORMED_PEER`) when the part count is below 2 or above 1,177 (`FMX_MAX_HANDSHAKE_PARTS`), an index is not below the count, a part other than the last does not carry exactly 891 bytes, the last part is empty, the count differs from that of the first part, a repeated part carries different bytes, the assembled payload is longer than 1 MiB, or a HANDSHAKE frame arrives while parts are missing. A part that arrives after the verdict is dropped and does not count as activity. A byte-stream transport sends every handshake payload as one HANDSHAKE frame, whatever its size. `fmx_frame_decode` and `fmx_frame_decode_packet` still return `FMX_FRAME_UNKNOWN_TYPE` for type 4, so a HANDSHAKE PART frame on a stream poisons the decoder and closes the session.
+
 ### 12.3 Framing on a byte stream and on a packet
 
 On a stream, frames sit back to back with no separator, and `fmx_stream_decoder` decodes incrementally, so it can be fed as little as one byte at a time.
 A framing violation on a stream is fatal: there is no resynchronization point, so the decoder is poisoned permanently (`fmx_stream_decoder_poisoned`) and the session closes.
 
 On a packet transport, one packet holds exactly one frame; a short packet, or a packet with bytes left over after a complete frame, is treated as broken (`fmx_frame_decode_packet` returns `FMX_FRAME_TRUNCATED` or `FMX_FRAME_TRAILING`).
-A framing violation there is not fatal: the packet is dropped and the session continues, because a single datagram cannot corrupt any shared parsing state. The two transport kinds differ here on purpose.
+A framing violation there is not fatal: the packet is dropped and the session continues, because a single datagram cannot corrupt any shared parsing state. The two transport kinds differ here on purpose. A part that declares more than 891 bytes is such a violation and costs that packet.
+
+When a packet transport blocks, every frame that has to wait keeps its own packet, so a probe or an ack queued behind a message leaves as a separate datagram after it. Handshake parts wait the same way and do not count toward the 64 KiB outbound ceiling, because a payload of up to 1 MiB is queued as parts all at once.
 
 ## 13. The handshake
 
@@ -542,6 +556,8 @@ WebSocket, TLS, and QUIC transports are out of scope for this library. Writing o
 |---|---|---|
 | one message payload | `max_message_bytes`, 65536 by default | configuration; the protocol's own ceiling is 16 MiB (`FMX_MAX_MESSAGE_PAYLOAD`) |
 | one HANDSHAKE payload | 1 MiB | allocation guard (`FMX_MAX_HANDSHAKE_PAYLOAD`) |
+| one HANDSHAKE PART frame | 900 B | `FMX_PACKET_HANDSHAKE_BUDGET`; 891 bytes of payload after the 9-byte header (`FMX_PART_CONTENT_LEN`) |
+| parts of one handshake payload | 1,177 | enough parts for 1 MiB (`FMX_MAX_HANDSHAKE_PARTS`) |
 | messages declared in a hello | 1,000,000 | checked before any multiplication, so a hostile declared count cannot overflow (`FMX_MAX_SCHEMA_MESSAGES`) |
 | query rounds per session | 1 | |
 | frames processed per tick | `max_frames_per_tick`, 64 by default | tick fairness |
@@ -551,14 +567,16 @@ WebSocket, TLS, and QUIC transports are out of scope for this library. Writing o
 
 ## 18. Tests
 
-`make test` builds and runs `tests/test_frame.c`, `tests/test_handshake.c`, `tests/test_heartbeat.c`, `tests/test_runtime.c` and `tests/test_interop.c`, totaling 60 checks (11 + 20 + 10 + 15 + 4, counted from their `FMX_RUN` calls), plus `tests/test_demo.c` (1 check) when the generated demo tree is present, plus `tests/test_cpp.cpp` (8 checks) when a C++ compiler is available.
+`make test` builds and runs `tests/test_frame.c`, `tests/test_handshake.c`, `tests/test_heartbeat.c`, `tests/test_runtime.c`, `tests/test_interop.c`, `tests/test_udp.c` and `tests/test_handshake_part.c`, totaling 93 checks (11 + 20 + 10 + 17 + 6 + 3 + 26, counted from their `FMX_RUN` calls), plus `tests/test_demo.c` (1 check) when the generated demo tree is present, plus `tests/test_cpp.cpp` (9 checks) when a C++ compiler is available.
 `make sanitize` rebuilds from clean and reruns the same suite under AddressSanitizer and UndefinedBehaviorSanitizer.
 
 - `tests/test_frame.c`: byte-for-byte frame layout, a stream fed one byte at a time, several frames arriving in one read, permanent poisoning after a framing violation, packet framing, and the size caps.
 - `tests/test_handshake.c`: all four decision branches (§13.3), both query outcomes, every malformed hello/query/verdict/reply shape, the client deadline spanning two rounds, and a server that does not time out a peer that keeps answering probes.
 - `tests/test_heartbeat.c`: a full expiry cycle exercised without waiting for real time to pass.
 - `tests/test_runtime.c`: a fake transport exercising congestion, partial writes, `FMX_RECV_NEED_CAPACITY`, `FMX_SEND_TOO_LARGE`, the per-tick frame budget, and the one-terminal-event guarantee.
-- `tests/test_interop.c`: real TCP and UDP sockets, both directions, including a handshake that requires the second round.
+- `tests/test_interop.c`: real TCP and UDP sockets, both directions, including a handshake that requires the second round and a 300-message handshake that crosses UDP in parts.
+- `tests/test_udp.c`: session identifiers on a shared UDP socket.
+- `tests/test_handshake_part.c`: the split at 63 messages, the part layout, parts of at most 900 bytes, a stream transport keeping one frame, assembly in reverse order and with a repeated part, each way a set of parts can fail the handshake, a part after the verdict, a part on a byte stream, a query round in parts, parts held by a blocked transport leaving as separate packets, a hello larger than the outbound ceiling, and a probe held behind a message leaving as its own packet.
 - `tests/test_demo.c`: a `fomoxac`-generated codec carried over a real socket, model in and model out.
 - `tests/test_cpp.cpp`: the C++ RAII wrapper (`fomoxa::Transport`, `fomoxa::Connection`, `fomoxa::Server`, `fomoxa::Events`) exercised over the same paths.
 
@@ -599,6 +617,7 @@ include/fomoxa/           the public API, one header per concern
 include/fomoxa/net.h      umbrella header including all of the above
 include/fomoxa/net.hpp    the optional C++ RAII wrapper
 src/frame.c                frame envelope, packet decode, incremental stream decoder
+src/assembler.c            handshake parts written and put back together on a packet transport
 src/schema.c                the schema table a handshake compares
 src/handshake.c             hello, verdict, query, reply, and the server's decision
 src/session.c                the transport-agnostic state machine and its clocks

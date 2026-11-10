@@ -92,7 +92,7 @@ static void pump(fmx_connection *connection, fmx_server *server, trace *seen, in
     }
 }
 
-static void exercise(bool datagram) {
+static void exercise_with(bool datagram, const fmx_schema *schema) {
     fmx_listener listener;
     fmx_transport transport;
     fmx_server *server;
@@ -111,7 +111,7 @@ static void exercise(bool datagram) {
     }
     FMX_CHECK(port != 0);
 
-    server = fmx_server_create(listener, &SCHEMA, NULL);
+    server = fmx_server_create(listener, schema, NULL);
     FMX_CHECK(server != NULL);
 
     if (datagram) {
@@ -119,7 +119,7 @@ static void exercise(bool datagram) {
     } else {
         FMX_CHECK(fmx_tcp_connect("127.0.0.1", port, &transport) == FMX_OK);
     }
-    connection = fmx_connection_create(transport, &SCHEMA, NULL, fmx_now_ms());
+    connection = fmx_connection_create(transport, schema, NULL, fmx_now_ms());
     FMX_CHECK(connection != NULL);
 
     pump(connection, server, &seen, 60);
@@ -142,6 +142,31 @@ static void exercise(bool datagram) {
 
     fmx_connection_destroy(connection);
     fmx_server_destroy(server);
+}
+
+static void exercise(bool datagram) {
+    exercise_with(datagram, &SCHEMA);
+}
+
+static fmx_message_schema LARGE_MESSAGES[300];
+static uint64_t LARGE_PREFIXES[300];
+
+static void a_300_message_handshake_crosses_real_udp_in_parts(void) {
+    fmx_schema large;
+    size_t index;
+
+    for (index = 0; index < 300; ++index) {
+        uint32_t id = (uint32_t)(index + 1);
+        LARGE_PREFIXES[index] = (uint64_t)id * 100;
+        LARGE_MESSAGES[index].id = id;
+        LARGE_MESSAGES[index].fingerprint = (uint64_t)id * 100;
+        LARGE_MESSAGES[index].prefixes = &LARGE_PREFIXES[index];
+        LARGE_MESSAGES[index].prefix_count = 1;
+    }
+    large.fingerprint = 0x03000300;
+    large.messages = LARGE_MESSAGES;
+    large.message_count = 300;
+    exercise_with(true, &large);
 }
 
 static void tcp_talks_both_ways(void) {
@@ -365,6 +390,7 @@ int main(void) {
     build_schema();
     FMX_RUN(tcp_talks_both_ways);
     FMX_RUN(udp_talks_both_ways);
+    FMX_RUN(a_300_message_handshake_crosses_real_udp_in_parts);
     FMX_RUN(a_schema_conflict_is_refused_over_a_real_socket);
     FMX_RUN(a_peer_that_appends_a_field_still_connects);
     FMX_RUN(a_send_by_id_reaches_the_right_peer_after_a_peer_in_the_middle_leaves);

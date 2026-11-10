@@ -10,7 +10,7 @@ const char *fmx_frame_error_name(fmx_frame_error error) {
     case FMX_FRAME_INCOMPLETE:
         return "more bytes are needed";
     case FMX_FRAME_UNKNOWN_TYPE:
-        return "frame type is not 0..=3";
+        return "frame type is not 0..=4, or a handshake part arrived outside a packet transport";
     case FMX_FRAME_BAD_MAGIC:
         return "data frame magic is not 'C' 'Y'";
     case FMX_FRAME_MESSAGE_TOO_LARGE:

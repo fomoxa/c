@@ -1,6 +1,7 @@
 src/common.c
 src/event.c
 src/frame.c
+src/assembler.c
 src/schema.c
 src/handshake.c
 src/session.c
