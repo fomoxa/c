@@ -565,6 +565,8 @@ WebSocket, TLS, and QUIC transports are out of scope for this library. Writing o
 | UDP peers tracked by one listener | 256 | per-address queues in the UDP hub (`src/transport/udp.c`) |
 | datagrams queued per UDP peer | 64 | oldest dropped first |
 
+Because of the last row, a handshake payload that arrives at a UDP listener in more than 64 parts, which is a hello of more than about 4,000 messages, can lose its first parts when they come in together, and the handshake then expires (`implementation-guide/en/02-flows.md` §2.8).
+
 ## 18. Tests
 
 `make test` builds and runs `tests/test_frame.c`, `tests/test_handshake.c`, `tests/test_heartbeat.c`, `tests/test_runtime.c`, `tests/test_interop.c`, `tests/test_udp.c` and `tests/test_handshake_part.c`, totaling 93 checks (11 + 20 + 10 + 17 + 6 + 3 + 26, counted from their `FMX_RUN` calls), plus `tests/test_demo.c` (1 check) when the generated demo tree is present, plus `tests/test_cpp.cpp` (9 checks) when a C++ compiler is available.
