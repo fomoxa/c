@@ -4,6 +4,7 @@ WARN     = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion \
            -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith -Werror
 CFLAGS  ?= -O2 -g
 CPPFLAGS = -std=c99 -Iinclude -Isrc
+DEPFLAGS = -MMD -MP -MF $@.d
 
 LDLIBS  ?=
 ifeq ($(OS),Windows_NT)
@@ -65,11 +66,11 @@ $(LIB): $(OBJS)
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(DEPFLAGS) $(CFLAGS) $(WARN) -c $< -o $@
 
 $(BUILD)/tests/%: tests/%.c $(LIB)
 	@mkdir -p $(dir $@)
-	$(CC) $(TEST_CPPFLAGS) $(CFLAGS) $(WARN) $< $(LIB) $(LDLIBS) -o $@
+	$(CC) $(TEST_CPPFLAGS) $(DEPFLAGS) $(CFLAGS) $(WARN) $< $(LIB) $(LDLIBS) -o $@
 
 test: $(TEST_BINS) demo-test cpp-test
 	@set -e; for t in $(TEST_BINS); do ./$$t; done
@@ -78,7 +79,7 @@ test: $(TEST_BINS) demo-test cpp-test
 
 $(BUILD)/tests/test_demo: tests/test_demo.c $(LIB)
 	@mkdir -p $(dir $@)
-	$(CC) $(DEMO_CPPFLAGS) $(CFLAGS) $(DEMO_WARN) $< $(LIB) $(LDLIBS) -o $@
+	$(CC) $(DEMO_CPPFLAGS) $(DEPFLAGS) $(CFLAGS) $(DEMO_WARN) $< $(LIB) $(LDLIBS) -o $@
 
 demo-test:
 ifeq ($(DEMO_PRESENT),)
@@ -89,19 +90,21 @@ endif
 
 $(BUILD)/examples/%: examples/%.c $(LIB)
 	@mkdir -p $(dir $@)
-	$(CC) $(DEMO_CPPFLAGS) $(CFLAGS) $(DEMO_WARN) $< $(LIB) $(LDLIBS) -o $@
+	$(CC) $(DEMO_CPPFLAGS) $(DEPFLAGS) $(CFLAGS) $(DEMO_WARN) $< $(LIB) $(LDLIBS) -o $@
 
 examples: $(EXAMPLE_BINS) cpp-examples
+
+-include $(OBJS:=.d) $(TEST_BINS:=.d) $(BUILD)/tests/test_demo.d $(EXAMPLE_BINS:=.d)
 
 # --- optional C++ wrapper ------------------------------------------------
 $(BUILD)/tests/test_cpp: tests/test_cpp.cpp $(CPP_HEADER) $(LIB)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXX_CPPFLAGS) -Itests $(CXXFLAGS) $(CXX_WARN) $< $(LIB) $(LDLIBS) -o $@
+	$(CXX) $(CXX_CPPFLAGS) -Itests $(DEPFLAGS) $(CXXFLAGS) $(CXX_WARN) $< $(LIB) $(LDLIBS) -o $@
 
 $(BUILD)/examples/%_cpp: examples/%_cpp.cpp $(CPP_HEADER) $(LIB)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXX_CPPFLAGS) -I$(DEMO_DIR) -I$(DEMO_DIR)/src -I$(DEMO_DIR)/src/generated \
-		$(CXXFLAGS) $(DEMO_WARN) $< $(LIB) $(LDLIBS) -o $@
+		$(DEPFLAGS) $(CXXFLAGS) $(DEMO_WARN) $< $(LIB) $(LDLIBS) -o $@
 
 cpp-test:
 ifeq ($(CPP_TEST_ON),)
@@ -109,6 +112,8 @@ ifeq ($(CPP_TEST_ON),)
 else
 	@$(MAKE) --no-print-directory $(BUILD)/tests/test_cpp
 endif
+
+-include $(BUILD)/tests/test_cpp.d $(CPP_EX_BINS:=.d)
 
 cpp-examples:
 ifeq ($(CPP_EX_ON),)
