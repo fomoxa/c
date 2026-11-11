@@ -3,8 +3,8 @@
 // source: src/models/game.h
 // model: GameMessage
 // fingerprint: sha256:dbcd2f06d48f87275cca2869e644de74952a0315102be142edc21f935481e4b9
-// fomoxac-version: 0.2.0
-// generated-at: 2026-08-23T14:44:47Z
+// fomoxac-version: 0.2.3
+// generated-at: 2026-11-11T02:08:52Z
 
 #pragma once
 
@@ -20,9 +20,8 @@
 // of GameMessage's codecs actually populated them.
 //
 // Safe on a freshly zero-initialized struct GameMessage (struct GameMessage value = {0};), on one this
-// model's decode functions have populated, or on one already freed - never on
-// one still holding data from a *previous, unfreed* decode (see runtime.h's
-// module docs).
+// model's decode functions have populated, once or many times and whether or
+// not the last decode failed, or on one already freed.
 static inline void GameMessage_free(struct GameMessage *value) {
     free((void *)value->player_name);
     value->player_name = NULL;

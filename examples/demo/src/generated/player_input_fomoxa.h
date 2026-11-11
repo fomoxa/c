@@ -3,8 +3,8 @@
 // source: src/models/game.h
 // model: PlayerInput
 // fingerprint: sha256:9640ba029a478c57c3e974ff8202f430d23db1a24aa47bcedc402dfb167dbd0e
-// fomoxac-version: 0.2.0
-// generated-at: 2026-08-23T14:44:47Z
+// fomoxac-version: 0.2.3
+// generated-at: 2026-11-11T02:08:52Z
 
 #pragma once
 
@@ -20,9 +20,8 @@
 // of PlayerInput's codecs actually populated them.
 //
 // Safe on a freshly zero-initialized struct PlayerInput (struct PlayerInput value = {0};), on one this
-// model's decode functions have populated, or on one already freed - never on
-// one still holding data from a *previous, unfreed* decode (see runtime.h's
-// module docs).
+// model's decode functions have populated, once or many times and whether or
+// not the last decode failed, or on one already freed.
 static inline void PlayerInput_free(struct PlayerInput *value) {
     Vector3_free(&value->direction);
 }

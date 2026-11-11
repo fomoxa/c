@@ -3,8 +3,8 @@
 // source: src/models/game.h
 // model: Vector3
 // fingerprint: sha256:fd25fca4a43946958854707e20754b4ae9ae5649400b3b805e8b5fbaf709bcf1
-// fomoxac-version: 0.2.0
-// generated-at: 2026-08-23T14:44:47Z
+// fomoxac-version: 0.2.3
+// generated-at: 2026-11-11T02:08:52Z
 
 #pragma once
 
@@ -19,9 +19,8 @@
 // of Vector3's codecs actually populated them.
 //
 // Safe on a freshly zero-initialized struct Vector3 (struct Vector3 value = {0};), on one this
-// model's decode functions have populated, or on one already freed - never on
-// one still holding data from a *previous, unfreed* decode (see runtime.h's
-// module docs).
+// model's decode functions have populated, once or many times and whether or
+// not the last decode failed, or on one already freed.
 static inline void Vector3_free(struct Vector3 *value) {
     (void)value;
 }

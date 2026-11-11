@@ -4,8 +4,8 @@
 // model: PlayerInput
 // codec: input
 // fingerprint: sha256:0a2dc2c0a2f0630eb4e8944bd6e084fe4f33ed022128ea371f625027b996e2d8
-// fomoxac-version: 0.2.0
-// generated-at: 2026-08-23T14:44:47Z
+// fomoxac-version: 0.2.3
+// generated-at: 2026-11-11T02:08:52Z
 
 #pragma once
 
@@ -49,8 +49,8 @@ static inline bool PlayerInputInputCodec_encode(FomoxaWriter *writer, const stru
 // the stream ended inside is an error. Bytes left over after the last field
 // belong to a newer writer's model and are ignored.
 //
-// `*value` must not already hold data from a previous, unfreed decode - see
-// runtime.h's module docs.
+// `*value` must be zero-initialized, freed, or filled by an earlier decode,
+// whose buffers this one reuses.
 static inline FomoxaDecodeError PlayerInputInputCodec_decode(FomoxaReader *reader, struct PlayerInput *value) {
     if (fomoxa_reader_field_absent(reader)) {
         value->tick = 0;

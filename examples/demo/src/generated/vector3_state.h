@@ -4,8 +4,8 @@
 // model: Vector3
 // codec: state
 // fingerprint: sha256:2c72dc3072bc93dc0a8d465d6fa1a85e9cda0462239b79f35659241717d0726e
-// fomoxac-version: 0.2.0
-// generated-at: 2026-08-23T14:44:47Z
+// fomoxac-version: 0.2.3
+// generated-at: 2026-11-11T02:08:52Z
 
 #pragma once
 
@@ -48,8 +48,8 @@ static inline bool Vector3StateCodec_encode(FomoxaWriter *writer, const struct V
 // the stream ended inside is an error. Bytes left over after the last field
 // belong to a newer writer's model and are ignored.
 //
-// `*value` must not already hold data from a previous, unfreed decode - see
-// runtime.h's module docs.
+// `*value` must be zero-initialized, freed, or filled by an earlier decode,
+// whose buffers this one reuses.
 static inline FomoxaDecodeError Vector3StateCodec_decode(FomoxaReader *reader, struct Vector3 *value) {
     if (fomoxa_reader_field_absent(reader)) {
         value->x = 0.0f;

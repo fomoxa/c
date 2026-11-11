@@ -4,8 +4,8 @@
 // model: GameMessage
 // codec: state
 // fingerprint: sha256:69961c52b532c9d9e02c8d08bd8eed4eaa99a42b2775629a30c945265c840a75
-// fomoxac-version: 0.2.0
-// generated-at: 2026-08-23T14:44:47Z
+// fomoxac-version: 0.2.3
+// generated-at: 2026-11-11T02:08:52Z
 
 #pragma once
 
@@ -53,8 +53,8 @@ static inline bool GameMessageStateCodec_encode(FomoxaWriter *writer, const stru
 // the stream ended inside is an error. Bytes left over after the last field
 // belong to a newer writer's model and are ignored.
 //
-// `*value` must not already hold data from a previous, unfreed decode - see
-// runtime.h's module docs.
+// `*value` must be zero-initialized, freed, or filled by an earlier decode,
+// whose buffers this one reuses.
 static inline FomoxaDecodeError GameMessageStateCodec_decode(FomoxaReader *reader, struct GameMessage *value) {
     if (fomoxa_reader_field_absent(reader)) {
         value->player_id = 0;
@@ -63,9 +63,10 @@ static inline FomoxaDecodeError GameMessageStateCodec_decode(FomoxaReader *reade
         if (!fomoxa_decode_error_ok(&error)) return error;
     }
     if (fomoxa_reader_field_absent(reader)) {
+        free((void *)value->player_name);
         value->player_name = NULL;
     } else {
-        FomoxaDecodeError error = fomoxa_reader_read_string(reader, &value->player_name);
+        FomoxaDecodeError error = fomoxa_reader_read_string_into(reader, &value->player_name);
         if (!fomoxa_decode_error_ok(&error)) return error;
     }
     {
